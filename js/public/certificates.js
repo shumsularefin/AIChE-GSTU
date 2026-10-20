@@ -228,6 +228,3 @@ if (initial) {
   document.querySelector('.credential-id-option')?.setAttribute('open', '');
   verify(initial);
 }
-
-// certificates.html#verify (menu: Certificates → Verify a credential) opens the credential ID form.
-if (location.hash === '#verify') document.getElementById('verify')?.setAttribute('open', '');

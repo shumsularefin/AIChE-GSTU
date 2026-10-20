@@ -298,13 +298,6 @@ export function renderMembership(data, now = new Date()) {
   return `<div class="wrap membership-grid"><div class="membership-pitch"><p class="eyebrow">Join us now</p><h2>Start your journey with us</h2><p class="lead">${h(m.intro)}</p>${join.button || renew.button ? `<div class="membership-actions">${join.button}${renew.button}</div>` : ''}${notes.length ? `<ul class="membership-notes">${notes.map((n) => `<li>${h(n)}</li>`).join('')}</ul>` : ''}</div><div class="membership-card"><h3>Why join?</h3><ul class="check-list">${benefits}</ul><details class="home-membership-details"><summary>Membership benefits &amp; renewal</summary><div><h4>Who can join?</h4><p>${h(m.eligibility)}</p><h4>General membership</h4><p>${h(m.general)}</p><h4>Premium membership</h4><p>${h(m.premium)}</p><h4>Renew your membership</h4><p>${h(m.renewal)}</p></div></details></div></div>`;
 }
 
-/** Month and day stacked in a square, as in aiche.org event listings. */
-const dateBlock = (date) => {
-  const d = new Date(date + 'T12:00:00Z');
-  const month = d.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' }).toUpperCase();
-  return `<span class="date-block" aria-hidden="true"><b>${month}</b><span>${d.getUTCDate()}</span><small>${d.getUTCFullYear()}</small></span>`;
-};
-
 /** Homepage: the next upcoming events, then the most recent ones (three cards). */
 export function renderEventHighlights(data, now = new Date()) {
   const upcoming = data.events.filter((e) => !eventPast(e, now)).sort((a, b) => a.date.localeCompare(b.date));
@@ -314,7 +307,7 @@ export function renderEventHighlights(data, now = new Date()) {
   return `<div class="highlight-grid">${list
     .map(
       (e) =>
-        `<a class="highlight-card" href="${eventHref(e)}" data-reveal><div class="highlight-media">${photo(e.image, e.title)}<span class="chip">${eventPast(e, now) ? 'Past event' : eventOpen(e, now, data.forms) ? 'Registration open' : 'Upcoming'}</span></div><div class="highlight-body">${dateBlock(e.date)}<div class="highlight-text"><span class="event-kind">${categories[e.category]}</span><h3>${h(e.title)}</h3><time datetime="${e.date}">${eventDateLabel(e)}</time></div><span class="arrow-circle" aria-hidden="true">→</span></div></a>`,
+        `<a class="highlight-card" href="${eventHref(e)}" data-reveal><div class="highlight-media">${photo(e.image, e.title)}<span class="chip">${eventPast(e, now) ? 'Past event' : eventOpen(e, now, data.forms) ? 'Registration open' : 'Upcoming'}</span></div><div class="highlight-body"><span class="event-kind">${categories[e.category]}</span><h3>${h(e.title)}</h3><time datetime="${e.date}">${eventDateLabel(e)}</time><span class="arrow-circle" aria-hidden="true">→</span></div></a>`,
     )
     .join('')}</div>`;
 }
