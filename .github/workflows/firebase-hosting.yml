@@ -1,9 +1,8 @@
 name: Website checks and Firebase deployment
 
 # Pushes to main: run every check, then build from the published Firestore content and deploy Hosting.
-# Deployment is switched off until the Firebase project exists: set the repository variables
-# FIREBASE_PROJECT_ID, GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_HOSTING_SERVICE_ACCOUNT (DEPLOYMENT.md).
-# Until then, pushes and pull requests still run all checks.
+# Deploys with the service-account key in the FIREBASE_SERVICE_ACCOUNT secret (project: the
+# FIREBASE_PROJECT_ID variable, default aiche-gstu).
 # Every 15 minutes: rebuild and redeploy only when editors published something new, so search
 # engines and link previews pick it up, or when the Facebook Page has new posts for News.
 # Visitors already see published changes immediately.
@@ -56,7 +55,7 @@ jobs:
           retention-days: 7
 
   freshness:
-    if: github.event_name == 'schedule' && vars.FIREBASE_PROJECT_ID != ''
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -78,7 +77,7 @@ jobs:
     needs: [check, freshness]
     # After a successful check on main, or on schedule when published content changed.
     if: >-
-      !cancelled() && !failure() && github.ref == 'refs/heads/main' && vars.FIREBASE_PROJECT_ID != '' &&
+      !cancelled() && !failure() && github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch' ||
        (github.event_name == 'schedule' && needs.freshness.outputs.changed == 'true'))
     runs-on: ubuntu-latest
@@ -96,9 +95,9 @@ jobs:
       - name: Build from the published content
         env:
           # "firestore" fails the build rather than deploy the seed content when the database cannot be read.
-          # Set the variable CONTENT_SOURCE to "auto" for the very first deploy, before anything is published.
-          CONTENT_SOURCE: ${{ vars.CONTENT_SOURCE || 'firestore' }}
-          FIREBASE_PROJECT: ${{ vars.FIREBASE_PROJECT_ID }}
+          # Defaults to "auto" (seed content until the dashboard publishes); set the variable CONTENT_SOURCE to "firestore" afterwards.
+          CONTENT_SOURCE: ${{ vars.CONTENT_SOURCE || 'auto' }}
+          FIREBASE_PROJECT: ${{ vars.FIREBASE_PROJECT_ID || 'aiche-gstu' }}
           FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
           FACEBOOK_PAGE_TOKEN: ${{ secrets.FACEBOOK_PAGE_TOKEN }}
           FACEBOOK_GRAPH_VERSION: ${{ secrets.FACEBOOK_GRAPH_VERSION }}
@@ -107,12 +106,10 @@ jobs:
         run: node --test tests/unit/site.test.mjs
       - uses: google-github-actions/auth@v3
         with:
-          project_id: ${{ vars.FIREBASE_PROJECT_ID }}
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_HOSTING_SERVICE_ACCOUNT }}
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
       - name: Deploy Hosting (rules are deployed separately)
         env:
           FIREBASE_HOSTING_UPLOAD_CONCURRENCY: 5
-        run: npx firebase deploy --only hosting --project ${{ vars.FIREBASE_PROJECT_ID }} --non-interactive
+        run: npx firebase deploy --only hosting --project ${{ vars.FIREBASE_PROJECT_ID || 'aiche-gstu' }} --non-interactive
       - name: Keep only the newest releases
         run: node scripts/hosting-retention.mjs

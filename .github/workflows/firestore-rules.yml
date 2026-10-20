@@ -3,7 +3,7 @@ name: Deploy Firestore security rules
 # Started by hand (Actions → Deploy Firestore security rules → Run workflow) from main.
 # The "firestore-rules" environment requires approval by the repository owner before deploying.
 # It uses its own service account, which can only change security rules (not Hosting or data).
-# Needs the repository variables FIREBASE_PROJECT_ID, GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_RULES_SERVICE_ACCOUNT.
+# Uses the FIREBASE_SERVICE_ACCOUNT secret.
 on:
   workflow_dispatch:
 
@@ -34,7 +34,7 @@ jobs:
 
   deploy:
     needs: test
-    if: github.ref == 'refs/heads/main' && vars.FIREBASE_PROJECT_ID != ''
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: firestore-rules
@@ -50,8 +50,6 @@ jobs:
       - run: npm ci
       - uses: google-github-actions/auth@v3
         with:
-          project_id: ${{ vars.FIREBASE_PROJECT_ID }}
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_RULES_SERVICE_ACCOUNT }}
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
       - name: Deploy Firestore rules
-        run: npx firebase deploy --only firestore:rules --project ${{ vars.FIREBASE_PROJECT_ID }} --non-interactive
+        run: npx firebase deploy --only firestore:rules --project ${{ vars.FIREBASE_PROJECT_ID || 'aiche-gstu' }} --non-interactive
