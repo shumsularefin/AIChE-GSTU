@@ -43,8 +43,9 @@ async function loadCatalog() {
     if (!events.length)
       status.textContent = 'Events appear here once their certificates are issued. You can still use a credential ID below.';
   } catch {
-    select.innerHTML = '<option value="">Events unavailable</option>';
-    status.textContent = 'Event lookup is temporarily unavailable. You can still verify a credential ID below.';
+    // Same as an empty list: nothing is shown as broken while the database is being set up.
+    select.innerHTML = '<option value="">Select an event or service term</option>';
+    status.textContent = 'Events appear here once their certificates are issued. You can still use a credential ID below.';
   }
 }
 
