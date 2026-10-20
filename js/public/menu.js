@@ -24,6 +24,29 @@ export function setupMenu() {
     else toggle.focus();
   };
   toggle.addEventListener('click', () => setOpen(!isOpen()));
+  // Dropdowns: open on hover or keyboard focus on wide screens (CSS); the arrow buttons open them on
+  // touch screens and in the mobile menu. Opening one closes the others.
+  const closeSubmenus = (except) => {
+    for (const button of menu.querySelectorAll('.submenu-toggle'))
+      if (button !== except) {
+        button.setAttribute('aria-expanded', 'false');
+        button.parentElement.classList.remove('open');
+      }
+  };
+  menu.addEventListener('click', (e) => {
+    const button = e.target.closest('.submenu-toggle');
+    if (!button) return;
+    const open = button.getAttribute('aria-expanded') !== 'true';
+    closeSubmenus(button);
+    button.setAttribute('aria-expanded', String(open));
+    button.parentElement.classList.toggle('open', open);
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.has-menu')) closeSubmenus();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !isOpen()) closeSubmenus();
+  });
   menu.addEventListener('click', (e) => {
     if (e.target.closest('a') && isOpen()) setOpen(false, { focus: false });
   });
@@ -31,7 +54,7 @@ export function setupMenu() {
     if (!isOpen()) return;
     if (e.key === 'Escape') setOpen(false);
     if (e.key === 'Tab') {
-      const items = [...menu.querySelectorAll('a'), toggle];
+      const items = [...menu.querySelectorAll('a, .submenu-toggle')].filter((el) => el.offsetParent !== null).concat(toggle);
       const index = items.indexOf(document.activeElement);
       e.preventDefault();
       items[(index + (e.shiftKey ? items.length - 1 : 1)) % items.length].focus();
