@@ -1,0 +1,174 @@
+{
+  "images/Asset 15 (2).png": [
+    {
+      "src": "images/optimized/asset-15-2-480.webp",
+      "width": 480,
+      "height": 672,
+      "bytes": 36228
+    },
+    {
+      "src": "images/optimized/asset-15-2-960.webp",
+      "width": 701,
+      "height": 981,
+      "bytes": 69440
+    }
+  ],
+  "images/Asset 16 (2).png": [
+    {
+      "src": "images/optimized/asset-16-2-480.webp",
+      "width": 480,
+      "height": 673,
+      "bytes": 21486
+    },
+    {
+      "src": "images/optimized/asset-16-2-960.webp",
+      "width": 700,
+      "height": 981,
+      "bytes": 42250
+    }
+  ],
+  "images/Asset 18.png": [
+    {
+      "src": "images/optimized/asset-18-480.webp",
+      "width": 480,
+      "height": 672,
+      "bytes": 32472
+    },
+    {
+      "src": "images/optimized/asset-18-960.webp",
+      "width": 700,
+      "height": 980,
+      "bytes": 57974
+    }
+  ],
+  "images/Asset 19.png": [
+    {
+      "src": "images/optimized/asset-19-480.webp",
+      "width": 480,
+      "height": 672,
+      "bytes": 25358
+    },
+    {
+      "src": "images/optimized/asset-19-960.webp",
+      "width": 700,
+      "height": 980,
+      "bytes": 43888
+    }
+  ],
+  "images/Asset 31.png": [
+    {
+      "src": "images/optimized/asset-31-480.webp",
+      "width": 480,
+      "height": 672,
+      "bytes": 68022
+    },
+    {
+      "src": "images/optimized/asset-31-960.webp",
+      "width": 701,
+      "height": 981,
+      "bytes": 132220
+    }
+  ],
+  "images/Asset 55_1.png": [
+    {
+      "src": "images/optimized/asset-55-1-480.webp",
+      "width": 480,
+      "height": 672,
+      "bytes": 34318
+    },
+    {
+      "src": "images/optimized/asset-55-1-960.webp",
+      "width": 701,
+      "height": 981,
+      "bytes": 69658
+    }
+  ],
+  "images/Asset are.jpg": [
+    {
+      "src": "images/optimized/asset-are-480.webp",
+      "width": 480,
+      "height": 672,
+      "bytes": 23858
+    },
+    {
+      "src": "images/optimized/asset-are-960.webp",
+      "width": 960,
+      "height": 1344,
+      "bytes": 61562
+    },
+    {
+      "src": "images/optimized/asset-are-1600.webp",
+      "width": 1600,
+      "height": 2240,
+      "bytes": 123706
+    }
+  ],
+  "images/rone.png": [
+    {
+      "src": "images/optimized/rone-480.webp",
+      "width": 480,
+      "height": 672,
+      "bytes": 39822
+    },
+    {
+      "src": "images/optimized/rone-960.webp",
+      "width": 701,
+      "height": 981,
+      "bytes": 65776
+    }
+  ],
+  "images/shuvo bhai.png": [
+    {
+      "src": "images/optimized/shuvo-bhai-480.webp",
+      "width": 480,
+      "height": 672,
+      "bytes": 31438
+    },
+    {
+      "src": "images/optimized/shuvo-bhai-960.webp",
+      "width": 701,
+      "height": 981,
+      "bytes": 56848
+    }
+  ],
+  "images/chapter/aiche-charter-2026.jpg": [
+    {
+      "src": "images/optimized/aiche-charter-2026-480.webp",
+      "width": 480,
+      "height": 371,
+      "bytes": 14024
+    },
+    {
+      "src": "images/optimized/aiche-charter-2026-960.webp",
+      "width": 960,
+      "height": 742,
+      "bytes": 36950
+    },
+    {
+      "src": "images/optimized/aiche-charter-2026-1600.webp",
+      "width": 1054,
+      "height": 815,
+      "bytes": 43716
+    }
+  ],
+  "images/slide01.jpg": [
+    {
+      "src": "images/optimized/slide01-480.webp",
+      "width": 480,
+      "height": 252,
+      "bytes": 9692
+    },
+    {
+      "src": "images/optimized/slide01-960.webp",
+      "width": 960,
+      "height": 504,
+      "bytes": 21270
+    },
+    {
+      "src": "images/optimized/slide01-1600.webp",
+      "width": 1600,
+      "height": 840,
+      "bytes": 32434
+    }
+  ]
+}

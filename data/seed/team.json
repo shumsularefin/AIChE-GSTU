@@ -1,0 +1,156 @@
+{
+  "founders": [
+    {
+      "name": "Md. Kamruzzaman",
+      "role": "Advisor",
+      "image": "images/Asset 19.png"
+    },
+    {
+      "name": "S. M. Fazle Rabbi",
+      "role": "Co-Advisor",
+      "image": "images/Asset 18.png"
+    },
+    {
+      "name": "Md. Foysal Sikdar",
+      "role": "President",
+      "image": "images/Asset 15 (2).png"
+    },
+    {
+      "name": "Md. Shariful Islam",
+      "role": "Vice President",
+      "image": "images/Asset 31.png"
+    },
+    {
+      "name": "Md. Morshed Alam",
+      "role": "General Secretary",
+      "image": "images/Asset 55_1.png"
+    },
+    {
+      "name": "Abdullah Al Noman",
+      "role": "Finance Officer",
+      "image": "images/Asset 16 (2).png"
+    },
+    {
+      "name": "Md. Lalon Mia",
+      "role": "Managing Officer",
+      "image": ""
+    },
+    {
+      "name": "Rajat Kumar Singh Durjoy",
+      "role": "Organizing Officer",
+      "image": ""
+    },
+    {
+      "name": "Md. Abul Bashar",
+      "role": "Publishing & Media Officer",
+      "image": ""
+    },
+    {
+      "name": "Md. Al Shahariar",
+      "role": "Administrative Officer",
+      "image": "images/shuvo bhai.png"
+    },
+    {
+      "name": "Md. Ashik",
+      "role": "Public Relations (PR) Officer",
+      "image": ""
+    },
+    {
+      "name": "Saurav Sikdar",
+      "role": "Engagement Officer",
+      "image": ""
+    },
+    {
+      "name": "Md. Shahidul Islam",
+      "role": "Academic & Research Officer",
+      "image": "images/rone.png"
+    },
+    {
+      "name": "Shumsul Arefin",
+      "role": "Foreign Affairs Officer",
+      "image": "images/Asset are.jpg"
+    },
+    {
+      "name": "Md. Mamrose Hasan",
+      "role": "Industry Liaison",
+      "image": ""
+    },
+    {
+      "name": "Jony Mia",
+      "role": "General Member",
+      "image": ""
+    }
+  ],
+  "committees": {
+    "2026": {
+      "members": [
+        {
+          "name": "Md. Foysal Sikdar",
+          "role": "President",
+          "image": "images/Asset 15 (2).png"
+        },
+        {
+          "name": "Md. Shariful Islam",
+          "role": "Vice President",
+          "image": "images/Asset 31.png"
+        },
+        {
+          "name": "Md. Morshed Alam",
+          "role": "General Secretary",
+          "image": "images/Asset 55_1.png"
+        },
+        {
+          "name": "Abdullah Al Noman",
+          "role": "Finance Officer",
+          "image": "images/Asset 16 (2).png"
+        },
+        {
+          "name": "Md. Lalon Mia",
+          "role": "Managing Officer",
+          "image": ""
+        },
+        {
+          "name": "Rajat Kumar Singh Durjoy",
+          "role": "Organizing Officer",
+          "image": ""
+        },
+        {
+          "name": "Md. Abul Bashar",
+          "role": "Publishing & Media Officer",
+          "image": ""
+        },
+        {
+          "name": "Md. Al Shahariar",
+          "role": "Administrative Officer",
+          "image": "images/shuvo bhai.png"
+        },
+        {
+          "name": "Md. Ashik",
+          "role": "Public Relations (PR) Officer",
+          "image": ""
+        },
+        {
+          "name": "Saurav Sikdar",
+          "role": "Engagement Officer",
+          "image": ""
+        },
+        {
+          "name": "Md. Shahidul Islam",
+          "role": "Academic & Research Officer",
+          "image": "images/rone.png"
+        },
+        {
+          "name": "Shumsul Arefin",
+          "role": "Foreign Affairs Officer",
+          "image": "images/Asset are.jpg"
+        },
+        {
+          "name": "Md. Mamrose Hasan",
+          "role": "Industry Liaison",
+          "image": ""
+        }
+      ],
+      "roster": []
+    }
+  }
+}

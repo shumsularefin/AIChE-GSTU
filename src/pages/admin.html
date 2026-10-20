@@ -1,0 +1,46 @@
+<section class="ed" aria-labelledby="ed-heading">
+  <noscript><p class="ed-card">The Chapter Editor needs JavaScript. Public pages work without it.</p></noscript>
+
+  <div class="ed-signin" id="ed-signin">
+    <div class="ed-signin-card">
+      <img src="images/brand/aiche-symbol.png" width="56" height="56" alt="" aria-hidden="true">
+      <p class="ed-eyebrow">AIChE Student Chapter, GSTU</p>
+      <h1 id="ed-heading">Chapter Editor</h1>
+      <p>Update events, homepage images, membership information, team rosters and certificates without touching any code.</p>
+      <button type="button" class="ed-btn ed-btn-primary ed-btn-large" id="ed-sign-in"><span class="ed-google" aria-hidden="true">G</span> Sign in with Google</button>
+      <button type="button" class="ed-btn ed-btn-quiet" id="ed-signin-out" hidden>Sign out</button>
+      <p class="ed-signin-status" id="ed-signin-status" role="status" aria-live="polite"></p>
+      <p class="ed-muted">Access is granted by the chapter super-admin. Sign-in opens a Google window; allow pop-ups for this site if nothing appears.</p>
+    </div>
+  </div>
+
+  <div class="ed-shell" id="ed-shell" hidden>
+    <aside class="ed-sidebar" aria-label="Chapter Editor">
+      <div class="ed-brand">
+        <img src="images/brand/aiche-symbol.png" width="34" height="34" alt="" aria-hidden="true">
+        <div><strong>Chapter Editor</strong><span>AIChE Student Chapter, GSTU</span></div>
+        <button type="button" class="ed-nav-toggle" id="ed-nav-toggle" aria-expanded="false" aria-controls="ed-nav">Sections</button>
+      </div>
+      <nav class="ed-nav" id="ed-nav" aria-label="Editor sections"></nav>
+      <div class="ed-user-card">
+        <div class="ed-user" id="ed-user"></div>
+        <button type="button" class="ed-btn ed-btn-quiet ed-btn-small" id="ed-sign-out">Sign out</button>
+      </div>
+      <a class="ed-site-link" href="index.html" target="_blank" rel="noopener">View the website ↗</a>
+    </aside>
+
+    <div class="ed-main" id="ed-main" tabindex="-1">
+      <header class="ed-topbar">
+        <h2 id="ed-view-title">Overview</h2>
+        <div class="ed-topbar-actions">
+          <button type="button" class="ed-pill" id="ed-drafts-pill" hidden></button>
+          <button type="button" class="ed-btn ed-btn-primary" id="ed-publish-all" hidden>Publish all</button>
+        </div>
+      </header>
+      <div class="ed-view" id="ed-view"></div>
+    </div>
+  </div>
+
+  <div class="ed-toasts" id="ed-toasts" aria-live="polite"></div>
+  <button type="button" class="ed-top" id="ed-top" hidden aria-label="Back to top">↑ Top</button>
+</section>

@@ -1,0 +1,28 @@
+{
+  "name": "aiche-gstu-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:seed": "node scripts/build.mjs --seed",
+    "test": "node scripts/build.mjs --seed && node --test \"tests/unit/*.test.mjs\"",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-aiche-rules \"node --test --test-force-exit tests/rules/rules.test.mjs\"",
+    "test:e2e": "firebase emulators:exec --only firestore,auth --project demo-aiche-e2e \"playwright test\"",
+    "preview": "node scripts/serve.mjs",
+    "format": "prettier --write \"js/{admin,lib,public}/**/*.js\" \"scripts/*.mjs\" \"tests/**/*.mjs\""
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "@playwright/test": "^1.64.1",
+    "esbuild": "^0.28.2",
+    "firebase": "^12.19.0",
+    "firebase-tools": "15.28.1",
+    "google-auth-library": "^9.15.1",
+    "jsqr": "^1.4.0",
+    "prettier": "^3.3.3",
+    "sharp": "^0.34.5"
+  }
+}

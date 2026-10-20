@@ -1,0 +1,57 @@
+# Consolidated website project prompt
+
+This is a consolidated brief of the requested website, not a verbatim transcript. The site started as a copy of the ACS Student Chapter, GSTU website (https://github.com/shumsularefin/ACS-GSTU): it keeps that site's structure, dashboard, certificates and workflows, with AIChE branding and terminology and a new visual identity. Use this brief to review the delivered project.
+
+Build and maintain the AIChE Student Chapter, Gopalganj Science and Technology University website as a complete, responsive website on Firebase's free Spark plan. Use https://aiche-gstu.web.app as the main address, with working navigation from the firebaseapp.com alias. Keep the structure, functionality and Poppins typography of the original site, but give it the look of an official AIChE Student Chapter website inspired by aiche.org: a sharper, angular, professional design with square corners and clean edges instead of rounded shapes. Use modern semantic HTML, shared header/footer templates, optimized images and lightweight JavaScript. Avoid blocking preloaders, unnecessary animation libraries, flickering filters, overlapping text and avoidable page reloads.
+
+## Identity and public pages
+
+Use the supplied AIChE Student Chapter, GSTU logo (Logo.ai: the AIChE wordmark with gear and plant, "Student Chapter" and the university name) in the navigation (colour) and footer (white). Use the separate university logo on certificates. The palette is AIChE deep navy (#0b2341), AIChE blue (#005eb8) and sky (#009cde), with the logo's gold (#c8992b) as the accent. Headings are bold and labels are uppercase and letter-spaced; sections use angled edges, ruled cards and gold rules. Preserve readable contrast and a consistent visual theme across pages.
+
+Use a faint hexagon-lattice texture (from the hexagon in the chapter mark) as a watermark across white content areas on Home, About, Events, Team and the Certificate Center. The About story title must sit clearly outside its cover image without overlap. Make the homepage hero images editable in the dashboard, with automatic rotation plus Previous, Next and Pause/Play controls. Respect reduced-motion preferences. Keep slides stable while images load.
+
+Remove the redundant recent-work/activity section from Home because the Events page serves that purpose. Include membership benefits, eligibility, renewal and application information on Home instead of a separate membership page. Highlight open upcoming events on Home and link each to its detail page. Registration links are optional; do not prevent an event from saving when no registration link exists. Provide appropriate calendar links for events.
+
+## Events
+
+Provide four event categories at the top, matching the annual report sections: Service, Professional Development, Chapter Development and Sustainability. Place year navigation below the event grid, using previous/next and year links. Display events as square image cards with title and date on hover, with accessible equivalents for touch and keyboard users. Cards open a dedicated event detail page. Category changes must not cause screen flashing, page reloads or unstable animations. Preserve event links and show sensible empty states.
+
+## Team and annual rosters
+
+Show founding members first. Provide annual executive committees with previous/next and year navigation. Each year has a button or expandable section for its general and premium members. Clearly label years without supplied data; do not invent real members.
+
+In the dashboard, separate committee/founder records from general/premium roster records. Committee/founder records have a name, role and optional photo. Roster records have a member name and membership ID, with year and General/Premium tier selected in the dashboard. Roster records have no role or photo field. Provide a dedicated XLSX/XLS/CSV member upload inside the roster section, a two-column template (Members Name, Membership ID), a readable preview and a simple save/publish action. Keep leading zeroes in IDs. Updates match existing membership IDs. Public rosters display names and tiers, while membership IDs remain protected.
+
+## Dashboard and access
+
+Use Google sign-in only. The verified account muhammadshamsularefin01@gmail.com is the permanent owner/super-admin. Never introduce a public fixed password or a client-only authentication bypass. Unauthorized visitors may view public pages but cannot edit content, issue credentials or read private rosters/logs. Enforce permissions in Firebase security rules, not just by hiding controls.
+
+Super-admins can manage website content, executive committees, annual rosters, certificates and editor access. The owner can assign another verified Google account to a supported role, including Super-admin, change or disable access, and remove an editor grant. Keep the permanent owner protected from accidental removal. Outreach editors can add new events, issue participant certificates, and edit homepage feature images and homepage membership/renewal information. Administrative records and access management remain restricted to super-admins. Retain the supported intermediate chapter-administrator role with its documented certificate permissions.
+
+Provide a super-admin activity log recording who changed what and when, using server timestamps. Preserve activity history when an editor grant is removed. Include delete/remove controls for editable records where appropriate, with confirmation. Preserve credential history through revocation instead of silently erasing issued certificates.
+
+Use consistent spacing for headings, forms, tables and sections. Make the dashboard easy for non-developers: load published content automatically after sign-in, save section changes, and provide one clear Publish website action for administrative drafts. Show immediate visible success/error feedback, explain incomplete required fields and protect against overwriting a newer publication. Put advanced imports and backup tools behind clearly labeled expandable sections. Allow images to be uploaded directly from a device, with automatic optimization and an image library; users should not need GitHub to upload a photo.
+
+## Digital certificates
+
+Replace paper distribution with downloadable digital certificates. The admin chooses the category first, then enters one recipient or imports Excel/CSV/JSON. Show only relevant fields: event title/date for event certificates, fiscal year/service term for executive recognition without requiring an event. Individual executive-recognition certificates must not require a spreadsheet. Support participant, champion, runner-up, second-runner-up, instructor, teacher, guest, delegate, organization/institution, executive service and general achievement categories. Executive certificates include a fiscal year/service term and optional office held.
+
+Use three certificate designs of the chapter's own, unlike the ACS designs: Horizon (white sheet, angled navy panel with the logo and QR) for participation and achievement; Prestige (navy and gold, octagonal frame, placement ribbon and hexagon medal) for champion and runners-up; Heritage (ivory, serif, gold hexagon seal around the QR) for instructors, teachers, guests, delegates, institutions and executive service. Include the chapter logo, the GSTU logo and the Advisor/Co Advisor signatures. Dr. Md. Kamruzzaman is Professor and Advisor; S. M. Fazle Rabbi is Co Advisor. Apply gold/silver/bronze placement accents. Generate the recipient name, event or service details, issue date, credential ID and scannable verification QR individually on every certificate.
+
+Every certificate shows a real QR code, a scan instruction, the issue date and the unique credential ID. Preview certificates must be clearly marked SAMPLE/not issued. Every issued certificate has a unique stable ID and its own QR-linked verification URL. A QR is not proof unless the corresponding record was issued and remains valid.
+
+Rename the public entry point Certificate Center. Members can select an event and enter their AIChE membership ID to retrieve issued certificates, or verify with a credential ID. Download the verified certificate as a PDF from the website. The chapter is new, so there are no older credentials: only the dashboard issues certificates. Prevent public participant-directory listing, allow authorized revocation, and show revoked/not-found states clearly. Provide a clearly labeled final Save and issue certificates action, recovery backups and shareable credential links. Repeated submissions must not duplicate or overwrite conflicting issued IDs.
+
+## Annual reports
+
+Add an Annual reports section to the dashboard for every editor role. By default the report year runs from 1 May of the previous year to 31 May (the period can be adjusted to AIChE's dates). The editor selects a year; the dashboard collects the published events whose start date falls in it, groups them by the four categories, and downloads a PDF: each section's events with title, date, location, category and description, followed by self-assessment questions for the executives to answer (to be checked against AIChE's current annual report form). Editors can leave events out, use a different section for the report only, and also list events under Sustainability. An Excel copy of the event list is available.
+
+## Hosting, collaboration and handover
+
+Keep the implementation compatible with Firebase Spark, without requiring paid Cloud Functions or Cloud Storage. Explain any applicable free-tier limits. Keep the code in https://github.com/shumsularefin/AICHE-GSTU and deploy Firebase Hosting automatically after successful checks on pushes to main. Use short-lived GitHub-to-Google credentials rather than committing service-account keys. Deploy permission rules separately with explicit review.
+
+Provide a clean source package, setup and deployment documentation, a practical update guide for editors and developers, and this consolidated brief for verification. Explain how to grant dashboard access and how to invite developers to GitHub separately. Explain the feasibility and prerequisites of automatic Facebook event updates without promising an integration that has not been connected. Test mobile layouts, navigation, saving/publishing, spreadsheet validation, certificates, permission boundaries and the deployment pipeline. Clearly distinguish completed live features from configuration that still needs to be applied.
+
+Support automatic uploaded-image references with visible previews. Hide executive titles on founding cards and list the sixteen founding members (chartered September 2026) and include the founding officers in the 2026 executive committee with their titles. Remove placeholder committee notices. Dashboard sections should collapse individually and have a Back to top control. Certificate JSON backup downloads are optional; show a shareable credential link after issuance, including for recipients without membership IDs.
+
+Dashboard usability: put publishing first, start sections collapsed with prominent +/− controls, identify and open unsaved content sections, and exclude certificate/access forms from website draft warnings. Allow manual member ordering with up/down buttons. Support start/end date ranges and inclusive multi-day calendars. Promote open events with an aqua-highlighted hero registration button. Use an off-white formal certificate background and center the QR/credential block on the artboard.

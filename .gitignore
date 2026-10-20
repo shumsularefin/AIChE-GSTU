@@ -1,0 +1,27 @@
+# Build output and test results
+/public/
+/test-results/
+/playwright-report/
+node_modules/
+/node_modules
+
+# Local working material
+/output/
+/checks/
+/tmp/
+/original-site/
+/.firebase/
+/.claude/
+/tmp-*
+*.log
+.DS_Store
+
+# Secrets and private exports (backups contain membership IDs)
+.env
+.env.*
+gha-creds-*.json
+*service-account*.json
+*.pem
+*.key
+aiche-gstu-backup-*.json
+data/backups/

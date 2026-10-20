@@ -1,0 +1,8 @@
+{
+  "cloudEnabled": false,
+  "firebase": {
+    "apiKey": "",
+    "authDomain": "aiche-gstu.firebaseapp.com",
+    "projectId": "aiche-gstu"
+  }
+}

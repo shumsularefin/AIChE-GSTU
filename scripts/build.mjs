@@ -1,0 +1,661 @@
+// Builds the static website into public/.
+//
+// Content source (CONTENT_SOURCE):
+//   firestore  read the published content from Firestore and fail if it is unavailable (deployments)
+//   seed       use data/seed/*.json only (tests and offline work)
+//   auto       try Firestore, fall back to the seed with a warning (default)
+// FIRESTORE_ORIGIN and FIREBASE_PROJECT point the build at the Firestore emulator for end-to-end tests.
+import sharp from 'sharp';
+import fs from 'node:fs';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import * as esbuild from 'esbuild';
+import {
+  normalizeContent,
+  normalizeNews,
+  visibleNews,
+  publicContent,
+  escapeHTML as h,
+  calendarICS,
+  contentSignature,
+} from '../js/lib/content-model.js';
+import {
+  configureRender,
+  renderEvents,
+  renderEvent,
+  renderTeam,
+  renderMembership,
+  renderOpenEvent,
+  renderEventHighlights,
+  renderHeroSlides,
+  heroSlides,
+  renderNews,
+  renderNewsHighlights,
+} from '../js/lib/content-render.js';
+import { firestoreREST } from '../js/lib/firestore-rest.js';
+import { facebookConfig, fetchPagePosts, fetchPostMedia, postsSignature } from '../js/lib/facebook.js';
+import { loadPublished } from '../js/lib/content-store.js';
+import { CHAPTER_NAME, SITE_ORIGIN } from '../js/lib/site-identity.js';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+process.chdir(root);
+const read = (p) => fs.readFileSync(p, 'utf8');
+const json = (p) => JSON.parse(read(p));
+const config = json('data/site-config.json');
+const source = process.argv.includes('--seed') ? 'seed' : process.env.CONTENT_SOURCE || 'auto';
+const projectId = process.env.FIREBASE_PROJECT || config.firebase.projectId;
+const firestoreOrigin = process.env.FIRESTORE_ORIGIN || 'https://firestore.googleapis.com';
+const warnings = [];
+const warn = (message) => {
+  warnings.push(message);
+  console.warn('warning: ' + message);
+};
+
+// ------------------------------------------------------------------ content
+
+function seedContent() {
+  return normalizeContent({
+    events: json('data/seed/events.json'),
+    team: json('data/seed/team.json'),
+    membership: json('data/seed/membership.json'),
+    homepage: { images: ['images/optimized/slide01-1600.webp'] },
+  });
+}
+
+async function loadContent() {
+  const seed = seedContent();
+  if (source === 'seed') return { content: seed, layout: 'seed', revision: 'seed' };
+  const rest = firestoreREST(projectId, { origin: firestoreOrigin });
+  try {
+    const published = await loadPublished(rest, { warn, fallback: seed });
+    if (published) return { ...published, rest };
+    if (source === 'firestore') throw Error('No published content was found in Firestore.');
+    warn('No published content in Firestore yet; using the seed content.');
+  } catch (error) {
+    if (source === 'firestore') throw error;
+    warn(`Firestore unavailable (${error.message}); using the seed content.`);
+  }
+  return { content: seed, layout: 'seed', revision: 'seed' };
+}
+
+const { content: loaded, layout, revision, rest, hiddenCertificateEvents = [] } = await loadContent();
+const data = publicContent(loaded);
+
+// ------------------------------------------------------------------ output folder
+
+const publicRoot = path.resolve('public');
+if (path.dirname(publicRoot) !== root || path.basename(publicRoot) !== 'public') throw Error('Unexpected output directory');
+fs.rmSync(publicRoot, { recursive: true, force: true });
+for (const dir of ['css', 'js', 'data', 'calendar', 'media', 'media/news']) fs.mkdirSync(path.join(publicRoot, dir), { recursive: true });
+const write = (file, body) => {
+  fs.mkdirSync(path.dirname(path.join(publicRoot, file)), { recursive: true });
+  fs.writeFileSync(path.join(publicRoot, file), body);
+};
+
+// Uploaded images are baked into the site so visitors do not spend database reads on them.
+const media = {};
+const references = new Set(JSON.stringify(data).match(/media:[a-f0-9-]{36}/g) || []);
+for (const reference of references) {
+  const id = reference.slice(6);
+  try {
+    const doc = rest && (await rest.get(`siteImages/${id}`));
+    const match = doc?.image?.match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) throw Error('not found');
+    write(`media/${id}.jpg`, Buffer.from(match[1], 'base64'));
+    media[reference] = `media/${id}.jpg`;
+  } catch (error) {
+    warn(`Uploaded image ${id} could not be baked (${error.message}); it will load from the database.`);
+  }
+}
+// Facebook Page posts for News. With the GitHub secrets set, the latest posts are fetched and their
+// photos saved with the site (Facebook photo links expire). Otherwise, or when Facebook is
+// unreachable, the News already on the live site is kept.
+const LIVE = `${SITE_ORIGIN}/`;
+const imageTypes = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+// Photos are re-encoded as WebP to keep hosting storage small: News cards get one 720px copy;
+// coverage photos get a 1600px copy for the album and a 480px thumbnail (<id>-t.webp) for the grid.
+// The same photo always produces the same bytes, so repeated builds add no new storage.
+const SIZES = {
+  news: [[720, 72, '']],
+  coverage: [
+    [1600, 78, ''],
+    [480, 62, '-t'],
+  ],
+};
+async function savePicture(id, url, folder = 'media/news') {
+  try {
+    const response = await fetch(url);
+    const ext = imageTypes[(response.headers.get('content-type') || '').split(';')[0].trim()];
+    if (!response.ok || !ext) throw Error(`status ${response.status}`);
+    const body = Buffer.from(await response.arrayBuffer());
+    if (body.length > 8 * 1024 * 1024) throw Error('too large');
+    for (const [width, quality, suffix] of SIZES[folder.startsWith('media/coverage') ? 'coverage' : 'news'])
+      write(
+        `${folder}/${id}${suffix}.webp`,
+        await sharp(body).rotate().resize({ width, withoutEnlargement: true }).webp({ quality, effort: 5 }).toBuffer(),
+      );
+    return `${folder}/${id}.webp`;
+  } catch (error) {
+    warn(`Photo ${folder}/${id} could not be saved (${error.message}).`);
+    return '';
+  }
+}
+// In GitHub Actions, News problems also show as warnings on the run page (visible without the log).
+const notice = (message) => {
+  if (process.env.GITHUB_ACTIONS) console.log(`::warning title=News::${message.replace(/\s+/g, ' ')}`);
+};
+async function loadNews() {
+  if (source === 'seed') return { connected: false, signature: '', posts: [] };
+  const facebook = facebookConfig();
+  if (!facebook && process.env.GITHUB_ACTIONS) {
+    const missing = ['FACEBOOK_PAGE_ID', 'FACEBOOK_PAGE_TOKEN'].filter((name) => !String(process.env[name] || '').trim());
+    notice(
+      `Facebook is not connected: the repository secret${missing.length > 1 ? 's' : ''} ${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} missing.`,
+    );
+  }
+  if (facebook)
+    try {
+      const posts = await fetchPagePosts(facebook);
+      const saved = [];
+      for (const p of posts)
+        saved.push({
+          id: p.id,
+          text: p.text,
+          createdAt: p.createdAt,
+          link: p.link,
+          image: p.picture ? await savePicture(p.id, p.picture) : '',
+        });
+      console.log(`News: ${saved.length} Facebook post(s).`);
+      if (!saved.length)
+        notice('Facebook answered, but the Page has no posts the token can read. Check that the token is the Page token from me/accounts.');
+      return { connected: true, signature: postsSignature(posts), posts: saved };
+    } catch (error) {
+      warn(`Facebook posts unavailable (${error.message}); keeping the News already published.`);
+      notice(`Facebook posts unavailable: ${error.message}`);
+    }
+  try {
+    const live = await fetch(LIVE + 'data/news.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null));
+    if (!live) return { connected: false, signature: '', posts: [] };
+    const posts = normalizeNews(live.posts);
+    for (const p of posts) if (p.image) p.image = (await savePicture(p.id, LIVE + p.image)) || '';
+    return { connected: !!live.connected, signature: live.signature || '', posts };
+  } catch {
+    return { connected: false, signature: '', posts: [] };
+  }
+}
+const newsFeed = await loadNews();
+data.news = newsFeed.posts;
+write('data/news.json', JSON.stringify(newsFeed));
+
+// Event coverage on Facebook. Share links (facebook.com/share/v/…) redirect to the real video
+// address, which the Facebook player needs. Posts (share/p/…, /posts/…) are read through the
+// Graph API for their photos (saved with the site, since Facebook photo links expire) and video;
+// without the token, the post's preview image is used. Resolved once per build.
+const FB_POST = /^https:\/\/(www\.|m\.|web\.)?facebook\.com\/(share\/p\/|[^/]+\/posts\/|permalink\.php|story\.php|photo)/;
+const graphPrefix = newsFeed.posts[0]?.id.split('_')[0] || (/^\d+$/.test(facebookConfig()?.pageId || '') ? facebookConfig().pageId : '');
+async function facebookPage(url) {
+  const response = await fetch(url, { headers: { 'User-Agent': 'facebookexternalhit/1.1' } });
+  const html = await response.text();
+  const meta = (name) => html.match(new RegExp(`<meta[^>]+property="${name}"[^>]+content="([^"]*)"`))?.[1]?.replace(/&amp;/g, '&') || '';
+  return { url: meta('og:url') || response.url, image: meta('og:image') };
+}
+const postNumber = (link) => {
+  try {
+    const url = new URL(link);
+    return (
+      url.searchParams.get('story_fbid')?.match(/^\d+$/)?.[0] ||
+      url.searchParams.get('fbid')?.match(/^\d+$/)?.[0] ||
+      url.pathname.match(/\/(\d{6,})\/?$/)?.[1] ||
+      ''
+    );
+  } catch {
+    return '';
+  }
+};
+const facebookVideoURL = (target) =>
+  target.pathname.startsWith('/watch')
+    ? `https://www.facebook.com/watch/?v=${target.searchParams.get('v')}`
+    : `https://www.facebook.com${target.pathname}`;
+const coverageNotice = (message) => {
+  warn(message);
+  if (process.env.GITHUB_ACTIONS) console.log(`::warning title=Coverage::${message.replace(/\s+/g, ' ')}`);
+};
+const isVideoAddress = (target) =>
+  /^(www\.)?facebook\.com$/.test(target.hostname) && /^\/(reel|watch|[^/]+\/videos)\b/.test(target.pathname);
+// When Facebook does not answer, the coverage already on the live site is kept.
+const liveEvents =
+  source === 'seed'
+    ? new Map()
+    : await fetch(LIVE + 'data/content.json', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : { events: [] }))
+        .then((live) => new Map((live.events || []).map((e) => [e.id, e])))
+        .catch(() => new Map());
+async function keepLiveCoverage(e) {
+  const live = liveEvents.get(e.id);
+  if (!live || live.sourceUrl !== e.sourceUrl) return;
+  if (!e.videoUrl && live.videoUrl) e.videoUrl = live.videoUrl;
+  if ((live.photos?.length || 0) > (e.photos?.length || 0)) {
+    const photos = [];
+    for (const [i, url] of live.photos.entries()) {
+      const saved = await savePicture(String(i + 1), LIVE + url, `media/coverage/${e.id}`);
+      if (saved) photos.push(saved);
+    }
+    e.photos = photos;
+  }
+}
+for (const e of data.events) {
+  if (source === 'seed' || !e.sourceUrl) continue;
+  if (/^https:\/\/(www\.|m\.)?facebook\.com\/share\/(v|r)\//.test(e.sourceUrl)) {
+    try {
+      const response = await fetch(e.sourceUrl, { redirect: 'manual', headers: { 'User-Agent': 'Mozilla/5.0' } });
+      let target = new URL(response.headers.get('location') || e.sourceUrl, e.sourceUrl);
+      if (!isVideoAddress(target)) target = new URL((await facebookPage(e.sourceUrl)).url || e.sourceUrl, e.sourceUrl);
+      if (isVideoAddress(target)) e.videoUrl = facebookVideoURL(target);
+      else coverageNotice(`Video link of ${e.id} did not lead to a video (${target.hostname}${target.pathname}).`);
+    } catch (error) {
+      coverageNotice(`Video link of ${e.id} could not be resolved (${error.message}).`);
+    }
+    await keepLiveCoverage(e);
+    continue;
+  }
+  if (!FB_POST.test(e.sourceUrl)) continue;
+  try {
+    let number = postNumber(e.sourceUrl);
+    let preview = '';
+    if (!number) {
+      const page = await facebookPage(e.sourceUrl);
+      number = postNumber(page.url);
+      preview = page.image;
+    }
+    let found = { photos: [], video: '' };
+    const facebook = facebookConfig();
+    if (facebook && number && graphPrefix)
+      try {
+        found = await fetchPostMedia(facebook, `${graphPrefix}_${number}`);
+      } catch (error) {
+        coverageNotice(`Coverage post of ${e.id} (${graphPrefix}_${number}) could not be read from Facebook: ${error.message}`);
+      }
+    if (!number) coverageNotice(`Coverage post of ${e.id} has no post number Facebook would show.`);
+    if (!found.photos.length && !found.video) {
+      if (!preview && number) preview = (await facebookPage(e.sourceUrl)).image;
+      if (/^https:\/\//.test(preview)) found.photos = [preview];
+    }
+    if (found.video)
+      try {
+        const target = new URL(found.video);
+        if (isVideoAddress(target)) e.videoUrl = facebookVideoURL(target);
+      } catch {}
+    const photos = [];
+    for (const [i, url] of found.photos.entries()) {
+      const saved = await savePicture(String(i + 1), url, `media/coverage/${e.id}`);
+      if (saved) photos.push(saved);
+    }
+    e.photos = photos;
+    if (photos.length < 2) await keepLiveCoverage(e);
+    console.log(`Coverage of ${e.id}: ${photos.length} photo(s)${e.videoUrl ? ' and a video' : ''}.`);
+  } catch (error) {
+    coverageNotice(`Coverage of ${e.id} could not be read (${error.message}).`);
+    await keepLiveCoverage(e);
+  }
+}
+
+const images = json('data/image-manifest.json');
+configureRender({ manifest: images, media, events: data.events.map((e) => e.id) });
+
+// ------------------------------------------------------------------ styles and scripts
+
+const hashed = (name, body, ext) => `${name}.${createHash('sha256').update(body).digest('hex').slice(0, 12)}.${ext}`;
+// Poppins font faces plus the site theme (AIChE brand colours).
+const siteCSS = read('css/original-fonts.css') + '\n' + read('css/theme.css');
+const cssName = hashed('site', siteCSS, 'css');
+write(`css/${cssName}`, siteCSS);
+const adminCSS = read('css/admin.css');
+const adminCSSName = hashed('admin', adminCSS, 'css');
+write(`css/${adminCSSName}`, adminCSS);
+
+const bundles = await esbuild.build({
+  entryPoints: { site: 'js/public/site.js', certificates: 'js/public/certificates.js', admin: 'js/admin/main.js' },
+  bundle: true,
+  minify: true,
+  format: 'esm',
+  target: ['es2022'],
+  sourcemap: 'linked',
+  outdir: path.join(publicRoot, 'js'),
+  entryNames: '[name].[hash]',
+  metafile: true,
+  legalComments: 'linked',
+  logLevel: 'warning',
+});
+const script = {};
+for (const [file, info] of Object.entries(bundles.metafile.outputs))
+  if (info.entryPoint && file.endsWith('.js')) script[path.basename(file).split('.')[0]] = 'js/' + path.basename(file);
+fs.copyFileSync('js/excel-worker.js', path.join(publicRoot, 'js/excel-worker.js'));
+fs.cpSync('js/vendor', path.join(publicRoot, 'js/vendor'), { recursive: true, filter: (f) => !/\.(mjs|md)$/.test(f) });
+
+// ------------------------------------------------------------------ pages
+
+const navItems = [
+  ['index', 'Home'],
+  ['activities', 'Activities'],
+  ...(visibleNews(data).length ? [['news', 'News']] : []),
+  ['team', 'Team'],
+  ['certificates', 'Certificate Center'],
+  ['about', 'About'],
+  ['contactus', 'Contact Us'],
+];
+const pages = [];
+
+// Swap bundled images for responsive, optimized variants.
+function optimize(html) {
+  return html.replace(/<img\b([^>]*?)src="([^"]+)"([^>]*?)>/g, (tag, before, src, after) => {
+    const variants = images[src];
+    if (!variants) return tag;
+    const v = variants[Math.min(1, variants.length - 1)];
+    const logo = tag.includes('AIChE Student Chapter');
+    const attrs = (before + after).replace(/\s(?:width|height|loading|decoding)="[^"]*"/g, '');
+    const srcset = [...new Map(variants.map((x) => [x.width, x])).values()].map((x) => `${x.src} ${x.width}w`).join(', ');
+    return `<img${attrs} src="${v.src}" srcset="${srcset}" sizes="${logo ? '200px' : '(max-width: 640px) 100vw, 600px'}" width="${v.width}" height="${v.height}" loading="${logo ? 'eager' : 'lazy'}" decoding="async">`;
+  });
+}
+
+function firstHeroImage() {
+  const first = data.homepage.images[0];
+  return media[first] || (first.startsWith('media:') ? 'images/optimized/slide01-1600.webp' : first);
+}
+
+/**
+ * view: the live-content view this page renders ('events', 'event', 'team', 'membership') so that
+ * js/public/site.js can refresh it after a publish, before the next scheduled rebuild.
+ */
+const SITE = `${SITE_ORIGIN}/`;
+// Tells search engines the site's name and logo (shown above the link in Google results).
+const siteSchema = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      '@id': `${SITE}#website`,
+      name: 'AIChE Student Chapter, GSTU',
+      alternateName: ['AIChE GSTU', 'AIChE Student Chapter, GSTU', 'AIChE Student Chapter GSTU'],
+      url: SITE,
+      publisher: { '@id': `${SITE}#organization` },
+    },
+    {
+      '@type': 'Organization',
+      '@id': `${SITE}#organization`,
+      name: 'AIChE Student Chapter, Gopalganj Science and Technology University',
+      alternateName: 'AIChE Student Chapter, GSTU',
+      url: SITE,
+      logo: `${SITE}ico/favicon-512.png`,
+      email: 'aiche.gstu@gmail.com',
+      sameAs: [
+        'https://www.facebook.com/aiche.gstu',
+        'https://www.linkedin.com/company/aiche-student-chapter-gstu',
+        'https://www.youtube.com/@aiche.gstu',
+        'https://www.instagram.com/aiche.gstu/',
+        'https://twitter.com/aichegstu',
+      ],
+    },
+  ],
+};
+const DEFAULT_SHARE_IMAGE = 'images/optimized/slide01-1600.webp';
+// Preview for certificate links (LinkedIn, WhatsApp, email): 1200×630, drawn from the certificate artwork.
+const CERTIFICATE_SHARE_IMAGE = 'images/brand/certificate-share.jpg';
+/** Absolute share-image URL for link previews (uploaded or bundled images only). */
+function shareImage(src) {
+  if (!src) return SITE + DEFAULT_SHARE_IMAGE;
+  if (src.startsWith('media:')) return media[src] ? SITE + media[src] : SITE + DEFAULT_SHARE_IMAGE;
+  if (/^https:/.test(src)) return src;
+  const v = images[src];
+  return SITE + (v ? v[v.length - 1].src : src);
+}
+
+function page(filename, { title, description, body, active, view, attrs = {}, admin = false, image = '' }) {
+  const navigation = navItems
+    .map(([id, label]) => `<li><a href="${id}.html"${id === active ? ' aria-current="page"' : ''}>${label}</a></li>`)
+    .join('');
+  const header = read('src/partials/header.html').replaceAll('{{navigation}}', navigation);
+  if (view) {
+    const dataAttrs = Object.entries({ view, ...attrs })
+      .map(([k, v]) => ` data-${k}="${h(v)}"`)
+      .join('');
+    body = `<div id="editable-content"${dataAttrs}>${body}</div>`;
+  }
+  const scripts = admin
+    ? `<link rel="stylesheet" href="css/${adminCSSName}"><script type="module" src="${script.admin}"></script>`
+    : `<script type="module" src="${script.site}"></script>${active === 'certificates' ? `<script type="module" src="${script.certificates}"></script>` : ''}`;
+  const canonical = `${SITE}${filename === 'index.html' ? '' : filename}`;
+  const head = [
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    `<title>${h(filename === 'index.html' ? title : `${title} | AIChE Student Chapter, GSTU`)}</title>`,
+    `<meta name="description" content="${h(description)}">`,
+    '<meta name="theme-color" content="#0b2341">',
+    `<link rel="canonical" href="${canonical}">`,
+    `<meta property="og:title" content="${h(title)}">`,
+    `<meta property="og:description" content="${h(description)}">`,
+    // Certificate links carry ?certId=…; without og:url, link previews keep that full address.
+    active === 'certificates' ? '' : `<meta property="og:url" content="${canonical}">`,
+    '<meta property="og:site_name" content="AIChE Student Chapter, GSTU">',
+    `<meta property="og:type" content="${view === 'event' ? 'article' : 'website'}">`,
+    `<meta property="og:image" content="${h(shareImage(image))}">`,
+    image === CERTIFICATE_SHARE_IMAGE
+      ? '<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="A verified digital certificate from the AIChE Student Chapter, GSTU">'
+      : '',
+    '<meta name="twitter:card" content="summary_large_image">',
+    admin || filename === '404.html' || filename.startsWith('form') ? '<meta name="robots" content="noindex,nofollow">' : '',
+    '<link rel="icon" type="image/png" sizes="48x48" href="ico/favicon-48.png">',
+    '<link rel="icon" type="image/png" sizes="96x96" href="ico/favicon-96.png">',
+    '<link rel="icon" type="image/png" sizes="192x192" href="ico/favicon-192.png">',
+    '<link rel="apple-touch-icon" href="ico/apple-touch-icon.png">',
+    '<link rel="manifest" href="site.webmanifest">',
+    filename === 'index.html' ? `<script type="application/ld+json">${JSON.stringify(siteSchema)}</script>` : '',
+    `<link rel="stylesheet" href="css/${cssName}">`,
+    active === 'index' ? `<link rel="preload" as="image" href="${h(firstHeroImage())}" fetchpriority="high">` : '',
+    scripts,
+  ].join('');
+  const bodyClass = `page-loaded ${active === 'index' ? 'home-page' : 'inner-page'}${admin ? ' editor-body' : ''}`;
+  const html = optimize(
+    `<!doctype html>\n<html lang="en"><head>${head}</head><body class="${bodyClass}" data-revision="${h(revision)}">${header}<main id="main">${body}</main>${read('src/partials/footer.html')}</body></html>`,
+  );
+  write(filename, html);
+  pages.push(filename);
+}
+
+const sourcePage = (name) => read(`src/pages/${name}.html`);
+
+// Home: hero images, the open-event button and membership details are baked in and refreshed live.
+const openEvent = renderOpenEvent(data);
+page('index.html', {
+  title: 'AIChE Student Chapter, GSTU | American Institute of Chemical Engineers at Gopalganj Science and Technology University',
+  description:
+    'The American Institute of Chemical Engineers (AIChE) International Student Chapter at Gopalganj Science and Technology University (GSTU): chemistry events, workshops, membership and certificates.',
+  active: 'index',
+  body: sourcePage('index')
+    .replace('{{openEventHidden}}', openEvent ? '' : ' hidden')
+    .replace('{{openEvent}}', openEvent)
+    .replace('{{membership}}', `<div id="editable-content" data-view="membership">${renderMembership(data)}</div>`)
+    .replace('{{heroSlides}}', renderHeroSlides(data))
+    .replace('{{heroClass}}', heroSlides(data).length ? ' has-slides' : '')
+    .replace('{{eventHighlights}}', renderEventHighlights(data))
+    .replace('{{news}}', `<div id="editable-content" data-view="news-highlights">${renderNewsHighlights(data)}</div>`)
+    .replace('{{eventCount}}', String(data.events.length))
+    .replace('{{teamYears}}', String(Object.keys(data.team.committees).length)),
+});
+page('about.html', {
+  title: 'Our story',
+  description: 'Discover our chapter story and vision.',
+  active: 'about',
+  body: sourcePage('about'),
+});
+page('contactus.html', {
+  title: 'Contact us',
+  description: 'Contact the chapter for membership, events and collaboration.',
+  active: 'contactus',
+  body: sourcePage('contactus'),
+});
+page('admin.html', {
+  title: 'Chapter Editor',
+  description: 'Authorized chapter content editor.',
+  active: 'admin',
+  body: sourcePage('admin'),
+  admin: true,
+});
+page('form.html', {
+  title: 'Chapter form',
+  description: 'Register or share feedback with the AIChE Student Chapter, GSTU.',
+  active: '',
+  body: sourcePage('form'),
+});
+// Every published form also gets its own page, so a link shared in WhatsApp or Messenger previews the form.
+for (const f of data.forms.filter((f) => f.status !== 'draft'))
+  page(`form-${f.id}.html`, {
+    title: f.title,
+    description: f.description || 'Register or share feedback with the AIChE Student Chapter, GSTU.',
+    active: '',
+    body: sourcePage('form'),
+  });
+for (const name of ['certificates', 'verify'])
+  page(`${name}.html`, {
+    title: 'Certificate Center',
+    description:
+      'Verify and download official digital certificates issued by the AIChE Student Chapter at Gopalganj Science and Technology University (GSTU).',
+    active: 'certificates',
+    image: CERTIFICATE_SHARE_IMAGE,
+    body: sourcePage('verify'),
+  });
+
+// Events: one archive page filtered by ?year=&type=, and one page per event for sharing and search.
+// News: posts from the chapter's Facebook Page (see FACEBOOK.md), minus those hidden in the Chapter Editor.
+page('news.html', {
+  title: 'News',
+  description: 'News and updates from the AIChE Student Chapter at GSTU, from our Facebook Page.',
+  active: 'news',
+  view: 'news',
+  body: renderNews(data),
+});
+page('activities.html', {
+  title: 'Events',
+  description: 'Chapter events and activities.',
+  active: 'activities',
+  view: 'events',
+  body: renderEvents(data),
+});
+for (const e of data.events) {
+  page(`event-${e.id}.html`, {
+    title: e.title,
+    description: e.description.slice(0, 300),
+    active: 'activities',
+    view: 'event',
+    attrs: { event: e.id },
+    image: e.image,
+    body: renderEvent(data, e.id),
+  });
+  write(`calendar/${e.id}.ics`, calendarICS(e));
+}
+page('event.html', {
+  title: 'Event details',
+  description: 'Chapter event information and registration.',
+  active: 'activities',
+  view: 'event',
+  body: renderEvent(data, ''),
+});
+
+// Team: founders by default; ?year= shows an annual committee and its roster.
+page('team.html', {
+  title: 'Team',
+  description: 'Meet our founding members and annual executive committees.',
+  active: 'team',
+  view: 'team',
+  body: renderTeam(data),
+});
+page('404.html', {
+  title: 'Page not found',
+  description: 'Find your way back to the chapter.',
+  active: '',
+  body: '<section class="archive"><h1>Page not found</h1><a href="index.html">Return home</a></section>',
+});
+
+// ------------------------------------------------------------------ assets and data
+
+// Original photos that have optimized copies (data/image-manifest.json) are not uploaded unless a
+// page, stylesheet or script names them directly: pages use the smaller copies, and hosting
+// storage stays small for years.
+const sourceText = ['src', 'css', 'js']
+  .flatMap((dir) => fs.readdirSync(dir, { recursive: true }).map((f) => path.join(dir, String(f))))
+  .filter((f) => /\.(html|css|js)$/.test(f) && fs.statSync(f).isFile())
+  .map((f) => fs.readFileSync(f, 'utf8'))
+  .join('\n');
+const replaced = new Set(Object.keys(images).filter((original) => !sourceText.includes(original)));
+for (const dir of ['images', 'ico', 'fonts'])
+  fs.cpSync(dir, path.join(publicRoot, dir), {
+    recursive: true,
+    filter: (f) => !path.basename(f).startsWith('.') && !replaced.has(path.relative('.', f).split(path.sep).join('/')),
+  });
+fs.copyFileSync('google3d74b2f79116caad.html', path.join(publicRoot, 'google3d74b2f79116caad.html'));
+write(
+  'site.webmanifest',
+  JSON.stringify({
+    name: 'AIChE Student Chapter, GSTU',
+    short_name: 'AIChE GSTU',
+    start_url: '/',
+    display: 'browser',
+    background_color: '#ffffff',
+    theme_color: '#0b2341',
+    icons: [
+      { src: 'ico/favicon-192.png', sizes: '192x192', type: 'image/png' },
+      { src: 'ico/favicon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+  }),
+);
+// End-to-end tests point the browser code at the local emulators instead of the live project.
+const siteConfig = process.env.FIRESTORE_ORIGIN
+  ? {
+      ...config,
+      cloudEnabled: true,
+      // The emulators accept any API key; a project that is not set up yet has none.
+      firebase: { ...config.firebase, apiKey: config.firebase.apiKey || 'demo-api-key', projectId },
+      emulators: { firestore: firestoreOrigin, auth: process.env.AUTH_EMULATOR_ORIGIN || '' },
+    }
+  : config;
+write('data/site-config.json', JSON.stringify(siteConfig, null, 2));
+fs.copyFileSync('data/image-manifest.json', path.join(publicRoot, 'data/image-manifest.json'));
+write('data/content.json', JSON.stringify(data));
+// Search engines: every public page, never the dashboard.
+const listed = pages.filter((f) => !['admin.html', '404.html', 'event.html', 'verify.html'].includes(f) && !f.startsWith('form'));
+const years = [...new Set(data.events.map((e) => e.date.slice(0, 4)))];
+const urls = [
+  ...listed.map((f) => SITE + (f === 'index.html' ? '' : f)),
+  ...years.map((y) => `${SITE}activities.html?year=${y}&amp;type=all`),
+  ...Object.keys(data.team.committees).map((y) => `${SITE}team.html?year=${y}`),
+];
+write(
+  'sitemap.xml',
+  `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.map((u) => `  <url><loc>${u}</loc></url>`).join('\n')}
+</urlset>
+`,
+);
+write(
+  'robots.txt',
+  `User-agent: *
+Disallow: /admin.html
+Sitemap: ${SITE}sitemap.xml
+`,
+);
+// Until the storage upgrade, Certificate Center entries hidden in the retired layout stay hidden.
+const build = {
+  revision,
+  layout,
+  signature: contentSignature(data),
+  events: data.events.map((e) => e.id),
+  media,
+  hiddenCertificateEvents,
+  warnings,
+};
+write('data/build.json', JSON.stringify(build, null, 2));
+if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `revision=${revision}\nlayout=${layout}\n`);
+
+console.log(`Built ${pages.length} pages from ${layout} content (revision ${revision}) with ${warnings.length} warning(s).`);
