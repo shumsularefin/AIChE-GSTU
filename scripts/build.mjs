@@ -19,6 +19,7 @@ import {
   escapeHTML as h,
   calendarICS,
   contentSignature,
+  categories,
 } from '../js/lib/content-model.js';
 import {
   configureRender,
@@ -335,15 +336,68 @@ fs.cpSync('js/vendor', path.join(publicRoot, 'js/vendor'), { recursive: true, fi
 
 // ------------------------------------------------------------------ pages
 
+// Main menu, as on aiche.org: top-level sections with dropdown links. [page id, label, href, children]
+const categoryLinks = Object.entries(categories)
+  .filter(([key]) => key !== 'all')
+  .map(([key, label]) => [`activities.html?year=all&type=${key}`, label]);
 const navItems = [
-  ['index', 'Home'],
-  ['activities', 'Activities'],
-  ...(visibleNews(data).length ? [['news', 'News']] : []),
-  ['team', 'Team'],
-  ['certificates', 'Certificate Center'],
-  ['about', 'About'],
-  ['contactus', 'Contact Us'],
+  [
+    'about',
+    'About',
+    'about.html',
+    [
+      ['about.html', 'Our story'],
+      ['team.html', 'Team & founding members'],
+      ['contactus.html', 'Contact us'],
+    ],
+  ],
+  [
+    'membership',
+    'Membership',
+    'index.html#membership',
+    [
+      ['index.html#membership', 'Become a member'],
+      ['index.html#membership', 'Benefits & renewal'],
+    ],
+  ],
+  ['activities', 'Events', 'activities.html', [['activities.html', 'All events'], ...categoryLinks]],
+  ...(visibleNews(data).length ? [['news', 'News', 'news.html', []]] : []),
+  [
+    'certificates',
+    'Certificates',
+    'certificates.html',
+    [
+      ['certificates.html', 'Certificate Center'],
+      ['certificates.html#verify', 'Verify a credential'],
+    ],
+  ],
 ];
+// Pages that belong to a menu section (for the highlighted menu item and the breadcrumb).
+const SECTION_OF = {
+  about: 'about',
+  team: 'about',
+  contactus: 'about',
+  activities: 'activities',
+  news: 'news',
+  certificates: 'certificates',
+};
+const navigationHTML = (active) =>
+  navItems
+    .map(([id, label, href, children]) => {
+      const current = SECTION_OF[active] === id ? ' aria-current="page"' : '';
+      if (!children.length) return `<li><a class="nav-top" href="${h(href)}"${current}>${label}</a></li>`;
+      const links = children.map(([to, text]) => `<li><a href="${h(to)}">${h(text)}</a></li>`).join('');
+      return `<li class="has-menu"><a class="nav-top" href="${h(href)}"${current}>${label}</a><button type="button" class="submenu-toggle" aria-expanded="false" aria-label="Show ${label} links"><span aria-hidden="true"></span></button><ul class="submenu">${links}</ul></li>`;
+    })
+    .join('');
+/** "Home / About / Our story" under the header on inner pages. */
+function breadcrumb(active, title) {
+  const section = navItems.find(([id]) => id === SECTION_OF[active]);
+  const trail = [['index.html', 'Home'], ...(section && section[1] !== title ? [[section[2], section[1]]] : [])];
+  return `<nav class="breadcrumb" aria-label="Breadcrumb"><ol class="wrap">${trail
+    .map(([href, label]) => `<li><a href="${h(href)}">${h(label)}</a></li>`)
+    .join('')}<li aria-current="page">${h(title)}</li></ol></nav>`;
+}
 const pages = [];
 
 // Swap bundled images for responsive, optimized variants.
@@ -412,10 +466,8 @@ function shareImage(src) {
 }
 
 function page(filename, { title, description, body, active, view, attrs = {}, admin = false, image = '' }) {
-  const navigation = navItems
-    .map(([id, label]) => `<li><a href="${id}.html"${id === active ? ' aria-current="page"' : ''}>${label}</a></li>`)
-    .join('');
-  const header = read('src/partials/header.html').replaceAll('{{navigation}}', navigation);
+  const crumbs = active && !['index', 'admin'].includes(active) && filename !== '404.html' ? breadcrumb(active, title) : '';
+  const header = read('src/partials/header.html').replaceAll('{{navigation}}', navigationHTML(active)) + crumbs;
   if (view) {
     const dataAttrs = Object.entries({ view, ...attrs })
       .map(([k, v]) => ` data-${k}="${h(v)}"`)
