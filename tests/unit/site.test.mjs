@@ -35,14 +35,14 @@ test('every page has the shared shell, one h1 and only local assets that exist',
   }
 });
 
-test('the AIChE brand theme, Poppins and the homepage content are in place', () => {
+test('the AIChE brand theme and the homepage content are in place', () => {
   const theme = read('css/theme.css');
-  for (const token of ['--navy: #0b2341', '--blue: #005eb8', '--gold: #c8992b', '--radius: 0px', 'prefers-reduced-motion'])
+  for (const token of ['--navy: #0b2341', '--blue: #005eb8', '--gold: #009cde', '--radius: 0px', 'prefers-reduced-motion'])
     assert.ok(theme.includes(token), token);
   const home = read('public/index.html');
   for (const text of [
-    'STUDENT<br>',
-    '<span>CHAPTER</span>',
+    'Student<br>',
+    '<span>Chapter</span>',
     'Engineering Tomorrow: Your AIChE Community at GSTU',
     'id="membership"',
     'Membership benefits &amp; renewal',
