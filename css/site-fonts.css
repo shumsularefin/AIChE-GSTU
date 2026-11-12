@@ -1,0 +1,10 @@
+/* Site typefaces (SIL Open Font License, see fonts/site/OFL-*.txt): Nunito Sans for headings, menus and
+   body text (close to aiche.org's Avenir), Merriweather for long-form reading (close to its Tisa serif). */
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url(../fonts/site/nunito-sans-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Nunito Sans'; font-style: italic; font-weight: 400; font-display: swap; src: url(../fonts/site/nunito-sans-latin-400-italic.woff2) format('woff2'); }
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url(../fonts/site/nunito-sans-latin-600-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url(../fonts/site/nunito-sans-latin-700-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 800; font-display: swap; src: url(../fonts/site/nunito-sans-latin-800-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 900; font-display: swap; src: url(../fonts/site/nunito-sans-latin-900-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Merriweather'; font-style: normal; font-weight: 400; font-display: swap; src: url(../fonts/site/merriweather-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Merriweather'; font-style: normal; font-weight: 700; font-display: swap; src: url(../fonts/site/merriweather-latin-700-normal.woff2) format('woff2'); }

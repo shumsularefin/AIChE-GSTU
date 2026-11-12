@@ -37,12 +37,22 @@ test('every page has the shared shell, one h1 and only local assets that exist',
 
 test('the AIChE brand theme and the homepage content are in place', () => {
   const theme = read('css/theme.css');
-  for (const token of ['--navy: #0b2341', '--blue: #005eb8', '--gold: #009cde', '--radius: 0px', 'prefers-reduced-motion'])
+  for (const token of [
+    '--navy: #00304c',
+    '--sky: #009ade',
+    '--green: #7fbb00',
+    '--link: #003366',
+    '--radius: 0px',
+    'prefers-reduced-motion',
+  ])
     assert.ok(theme.includes(token), token);
   const home = read('public/index.html');
   for (const text of [
-    'Student<br>',
-    '<span>Chapter</span>',
+    'The GSTU Home of Future Chemical Engineers',
+    'Our Three Pillars',
+    'class="menu-toggle"',
+    'class="header-join"',
+    'id="site-drawer"',
     'Engineering Tomorrow: Your AIChE Community at GSTU',
     'id="membership"',
     'Membership benefits &amp; renewal',
@@ -55,6 +65,7 @@ test('the AIChE brand theme and the homepage content are in place', () => {
   assert.ok(!home.includes('{{'), 'every template placeholder is filled');
   assert.ok(!home.includes('bootstrap'), 'no Bootstrap');
   assert.ok(read('css/original-fonts.css').includes('Poppins'));
+  assert.ok(read('css/site-fonts.css').includes('Nunito Sans'));
 });
 
 test('one events page and one team page cover every year', () => {

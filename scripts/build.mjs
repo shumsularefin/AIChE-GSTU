@@ -307,8 +307,8 @@ configureRender({ manifest: images, media, events: data.events.map((e) => e.id) 
 // ------------------------------------------------------------------ styles and scripts
 
 const hashed = (name, body, ext) => `${name}.${createHash('sha256').update(body).digest('hex').slice(0, 12)}.${ext}`;
-// Poppins font faces plus the site theme (AIChE brand colours).
-const siteCSS = read('css/original-fonts.css') + '\n' + read('css/theme.css');
+// Font faces (Poppins for the Chapter Editor; Nunito Sans and Merriweather for the site) plus the site theme.
+const siteCSS = read('css/original-fonts.css') + '\n' + read('css/site-fonts.css') + '\n' + read('css/theme.css');
 const cssName = hashed('site', siteCSS, 'css');
 write(`css/${cssName}`, siteCSS);
 const adminCSS = read('css/admin.css');

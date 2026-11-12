@@ -1,15 +1,23 @@
-// Site header: mobile menu (Escape closes, focus stays inside while open) and the scrolled style.
+// Site header, as on aiche.org: the green Menu button opens the main menu on small screens and the
+// drawer of further links on wide ones (Escape closes, focus stays inside while open), plus the scrolled style.
 const mobile = matchMedia('(max-width: 1080px)');
 
 export function setupMenu() {
   const header = document.getElementById('site-header');
   const toggle = document.getElementById('menu-toggle');
   const menu = document.getElementById('site-menu');
+  const drawer = document.getElementById('site-drawer');
   if (!header || !toggle || !menu) return;
+  // The panel the Menu button controls at the current width.
+  const panel = () => (mobile.matches || !drawer ? menu : drawer);
   const isOpen = () => toggle.getAttribute('aria-expanded') === 'true';
   // The menu is only hidden (inert) while it is collapsed on small screens.
   const sync = () => {
     menu.inert = mobile.matches && !isOpen();
+    if (drawer) {
+      drawer.inert = mobile.matches || !isOpen();
+      drawer.classList.toggle('open', !mobile.matches && isOpen());
+    }
   };
   const setOpen = (open, { focus = true } = {}) => {
     toggle.setAttribute('aria-expanded', String(open));
@@ -20,7 +28,7 @@ export function setupMenu() {
     document.body.classList.toggle('menu-open', open);
     sync();
     if (!focus) return;
-    if (open) menu.querySelector('a')?.focus();
+    if (open) panel().querySelector('a')?.focus();
     else toggle.focus();
   };
   toggle.addEventListener('click', () => setOpen(!isOpen()));
@@ -47,21 +55,25 @@ export function setupMenu() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !isOpen()) closeSubmenus();
   });
-  menu.addEventListener('click', (e) => {
-    if (e.target.closest('a') && isOpen()) setOpen(false, { focus: false });
+  for (const area of [menu, drawer].filter(Boolean))
+    area.addEventListener('click', (e) => {
+      if (e.target.closest('a') && isOpen()) setOpen(false, { focus: false });
+    });
+  document.addEventListener('click', (e) => {
+    if (isOpen() && !mobile.matches && !e.target.closest('#site-drawer, #menu-toggle')) setOpen(false, { focus: false });
   });
   document.addEventListener('keydown', (e) => {
     if (!isOpen()) return;
     if (e.key === 'Escape') setOpen(false);
     if (e.key === 'Tab') {
-      const items = [...menu.querySelectorAll('a, .submenu-toggle')].filter((el) => el.offsetParent !== null).concat(toggle);
+      const items = [...panel().querySelectorAll('a, .submenu-toggle')].filter((el) => el.offsetParent !== null).concat(toggle);
       const index = items.indexOf(document.activeElement);
       e.preventDefault();
       items[(index + (e.shiftKey ? items.length - 1 : 1)) % items.length].focus();
     }
   });
   mobile.addEventListener('change', () => {
-    if (!mobile.matches && isOpen()) setOpen(false, { focus: false });
+    if (isOpen()) setOpen(false, { focus: false });
     sync();
   });
   sync();
