@@ -160,7 +160,9 @@ export function showFormError(form, message, fieldName) {
 function guessField(form, message) {
   const text = message.toLowerCase();
   for (const field of form.elements) {
-    const label = field.closest('label')?.querySelector('.ed-label')?.textContent?.toLowerCase();
+    const words = field.closest('label')?.querySelector('.ed-label')?.cloneNode(true);
+    words?.querySelector('.ed-sort-inline')?.remove();
+    const label = words?.textContent?.toLowerCase();
     if (label && text.includes(label.replace(/\s*\(optional\)/, '').trim())) return field;
   }
   return null;

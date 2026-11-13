@@ -246,10 +246,19 @@ export const normalizeMembershipID = (value) =>
     .toUpperCase();
 
 /** Committee or founding member: name, role, optional photo. */
-export function normalizePerson(raw) {
+export function normalizePerson(raw, { keepPrivate = false } = {}) {
   const m = { name: text(raw.name, 150, 'Name'), role: text(raw.role, 150, 'Role'), image: safeURL(raw.image, true) };
   if (!m.name) throw Error('Member name is required.');
   if (!m.role) throw Error(`${m.name}: role is required.`);
+  // Executive members' membership ID and Google email stay private (rosterPrivate and the portal directory).
+  if (keepPrivate) {
+    m.memID = normalizeMembershipID(raw.memID).slice(0, 40);
+    m.email = String(raw.email ?? '')
+      .trim()
+      .toLowerCase()
+      .slice(0, 200);
+    if (m.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m.email)) throw Error(`${m.name}: enter a valid email address.`);
+  }
   return m;
 }
 
@@ -342,7 +351,11 @@ export function normalizeHomepage(raw) {
 export function normalizeCommittee(raw, { keepPrivate = false } = {}) {
   if (!Array.isArray(raw?.members) || !Array.isArray(raw?.roster ?? [])) throw Error('Invalid committee record.');
   return {
-    members: unique(raw.members.map(normalizePerson), (m) => m.name, 'committee member'),
+    members: unique(
+      raw.members.map((m) => normalizePerson(m, { keepPrivate })),
+      (m) => m.name,
+      'committee member',
+    ),
     roster: unique(
       (raw.roster ?? []).map((m) => normalizeRosterMember(m, { keepPrivate })),
       (m) => m.key,

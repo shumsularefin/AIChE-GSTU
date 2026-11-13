@@ -19,6 +19,8 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { createCloud, ConflictError } from '../../js/admin/cloud.js';
+import { createPortalStore } from '../../js/portal/store.js';
+import { localParts } from '../../js/lib/portal-model.js';
 import { normalizeContent, normalizeEvent } from '../../js/lib/content-model.js';
 import { importCertificates, membershipLookupID } from '../../js/lib/certificate-model.js';
 import { firestoreREST } from '../../js/lib/firestore-rest.js';
@@ -379,6 +381,37 @@ test('news: editors hide Facebook posts; everyone reads the list; nothing else i
   await assertSucceeds(outreach.cloud.savePage('news', { hidden: [] }, 1));
 });
 
+test('image cleanup: editors keep the unused-since record; nobody else reads or writes it', async () => {
+  const { owner, outreach, stranger, anon } = accounts;
+  const id = '0f8fad5b-d9cb-469f-a165-70867728950e';
+  assert.deepEqual(await owner.cloud.imageCleanup(), { unusedSince: {}, checkedOn: '' });
+  await assertSucceeds(owner.cloud.updateImageCleanup(() => ({ unusedSince: { [id]: '2026-09-01' }, checkedOn: '2026-10-23' })));
+  assert.equal(await owner.cloud.updateImageCleanup((s) => s), null, 'unchanged state is not written');
+  await assertSucceeds(outreach.cloud.updateImageCleanup((s) => ({ ...s, unusedSince: {} })));
+  assert.deepEqual((await outreach.cloud.imageCleanup()).unusedSince, {});
+  assert.equal(await stranger.cloud.imageCleanup(), null);
+  await assertFails(stranger.cloud.updateImageCleanup(() => ({ unusedSince: {}, checkedOn: 'x' })));
+  await assertFails(getDoc(doc(anon.db, 'imageCleanup', 'state')));
+  await assertFails(
+    setDoc(doc(outreach.db, 'imageCleanup', 'state'), {
+      unusedSince: {},
+      checkedOn: '',
+      updatedAt: serverTimestamp(),
+      updatedBy: outreach.uid,
+      note: 'x',
+    }),
+  );
+  await assertFails(
+    setDoc(doc(outreach.db, 'imageCleanup', 'other'), {
+      unusedSince: {},
+      checkedOn: '',
+      updatedAt: serverTimestamp(),
+      updatedBy: outreach.uid,
+    }),
+  );
+  await assertFails(deleteDoc(doc(owner.db, 'imageCleanup', 'state')));
+});
+
 test('images, activity log and removals', async () => {
   const { owner, outreach, other, anon, delegate } = accounts;
   const image = 'data:image/jpeg;base64,' + Buffer.from('jpeg').toString('base64');
@@ -415,4 +448,330 @@ test('images, activity log and removals', async () => {
   const batch = writeBatch(owner.db);
   batch.delete(doc(owner.db, 'events', 'science-fair'));
   await assertFails(batch.commit());
+});
+
+// ------------------------------------------------------------------ Member Portal
+
+const portalAccount = (name, email) => {
+  const a = account(name, email);
+  return { ...a, portal: createPortalStore({ db: a.db, auth: { currentUser: { uid: a.uid, email }, authStateReady: async () => {} } }) };
+};
+const claim = (name, memID) => ({ name, memID, rosterYear: '2026' });
+const profile = (a, extra = {}) => ({
+  uid: a.uid,
+  email: a.email,
+  name: a.uid,
+  memID: a.uid.toUpperCase(),
+  rosterYear: '2026',
+  designation: '',
+  role: 'member',
+  status: 'active',
+  ...extra,
+});
+
+test('portal profiles: members claim, the board approves, only the President names officers', async () => {
+  const pres = portalAccount('pres', 'pres@example.com');
+  const sec = portalAccount('sec', 'sec@example.com');
+  const m1 = portalAccount('m1', 'm1@example.com');
+  const m2 = portalAccount('m2', 'm2@example.com');
+  Object.assign(accounts, { pres, sec, m1, m2 });
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'portalMembers', pres.uid), profile(pres, { role: 'president' }));
+    await setDoc(doc(db, 'portalMembers', sec.uid), profile(sec, { role: 'secretary' }));
+    await setDoc(doc(db, 'rosterPrivate', '2026'), { ids: { ralpha001: 'M-1' } });
+  });
+
+  await assertSucceeds(m1.portal.claim(claim('Member One', 'm-1'), null));
+  const mine = await m1.portal.me();
+  assert.equal(mine.status, 'pending');
+  assert.equal(mine.memID, 'M-1');
+  // Not as someone else, not already active, not as President.
+  await assertFails(setDoc(doc(m2.db, 'portalMembers', m1.uid), profile(m2)));
+  await assertFails(
+    setDoc(
+      doc(m2.db, 'portalMembers', m2.uid),
+      profile(m2, { status: 'active', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: m2.uid }),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(m2.db, 'portalMembers', m2.uid),
+      profile(m2, { role: 'president', status: 'pending', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: m2.uid }),
+    ),
+  );
+  // A member cannot approve themselves.
+  await assertFails(updateDoc(doc(m1.db, 'portalMembers', m1.uid), { status: 'active', updatedAt: serverTimestamp(), updatedBy: m1.uid }));
+  await assertFails(m1.portal.reviewMember(m1.uid, { status: 'active' }));
+  // A plain member cannot read the roster IDs or the member list; the board can.
+  await assertFails(getDoc(doc(m1.db, 'rosterPrivate', '2026')));
+  await assertFails(m1.portal.members());
+  assert.deepEqual(await sec.portal.rosterIds('2026'), { ralpha001: 'M-1' });
+  assert.equal(await m1.portal.rosterIds('2026'), null);
+  // One officer approves; officers cannot be made by an officer, but can by the President.
+  await assertSucceeds(sec.portal.reviewMember(m1.uid, { status: 'active', designation: 'Executive Member' }));
+  await assertFails(sec.portal.reviewMember(m1.uid, { role: 'president' }));
+  await assertFails(sec.portal.reviewMember(m1.uid, { role: 'treasurer' }));
+  await assertSucceeds(pres.portal.reviewMember(m1.uid, { role: 'treasurer' }));
+  await assertFails(sec.portal.reviewMember(m1.uid, { designation: 'Changed by another officer' }));
+  // An officer cannot edit their own profile.
+  await assertFails(sec.portal.reviewMember(sec.uid, { designation: 'Self-made' }));
+  await assertSucceeds(accounts.owner.cloud.portal.reviewMember(pres.uid, { designation: 'President' }));
+  await assertSucceeds(pres.portal.reviewMember(m1.uid, { role: 'member' }));
+  // A pending claim can be withdrawn.
+  await assertSucceeds(m2.portal.claim(claim('Member Two', 'M-2'), null));
+  await assertSucceeds(m2.portal.withdrawClaim());
+  assert.equal(await m2.portal.me(), null);
+});
+
+const open = (extra = {}) => ({
+  id: 'd1',
+  label: 'Day 1',
+  ...localParts(new Date(Date.now() - 60000)),
+  question: 'Which topic was covered?',
+  answer: 'Catalysis',
+  ...extra,
+});
+
+test('portal attendance: the board sets up sessions, members answer once inside the window', async () => {
+  const { admin, outreach, m1, m2, anon, stranger } = accounts;
+  const sec = portalAccount('a-sec', 'a-sec@example.com');
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'events', 'portal-talk'), { id: 'portal-talk', title: 'Portal Talk' });
+    await setDoc(doc(db, 'portalMembers', m2.uid), profile(m2));
+    await setDoc(doc(db, 'portalMembers', sec.uid), profile(sec, { role: 'secretary', designation: 'Secretary' }));
+  });
+  const talk = { id: 'portal-talk', title: 'Portal Talk' };
+  // Chapter Editor roles give no portal powers.
+  for (const editor of [admin, outreach])
+    await assertFails(createPortalStore({ db: editor.db, auth: { currentUser: { uid: editor.uid } } }).saveAttendance(talk, [open()], []));
+  const future = { id: 'd2', label: 'Day 2', date: '2999-01-01', time: '10:00', question: 'Later question?', answer: 'Later' };
+  const closed = { id: 'd3', label: 'Day 3', date: '2020-01-01', time: '10:00', question: 'Old question?', answer: 'Old' };
+
+  // Only for events that exist, and only by staff.
+  const staff = sec.portal;
+  await assertFails(staff.saveAttendance({ id: 'missing-event', title: 'x' }, [open()], []));
+  await assertFails(m1.portal.saveAttendance(talk, [open()], []));
+  await assertSucceeds(staff.saveAttendance(talk, [open(), future, closed], []));
+
+  // Everyone reads the sessions; the question appears only once its day has opened.
+  await assertSucceeds(getDoc(doc(anon.db, 'attendance', 'portal-talk')));
+  await assertSucceeds(getDoc(doc(m1.db, 'attendanceQuestions', 'portal-talk__d1')));
+  await assertFails(getDoc(doc(m1.db, 'attendanceQuestions', 'portal-talk__d2')));
+  await assertFails(getDoc(doc(stranger.db, 'attendanceQuestions', 'portal-talk__d1')));
+  await assertSucceeds(getDoc(doc(sec.db, 'attendanceQuestions', 'portal-talk__d2')));
+  await assertFails(getDoc(doc(admin.db, 'attendanceQuestions', 'portal-talk__d2')));
+  await assertFails(getDoc(doc(m1.db, 'attendanceKeys', 'portal-talk__d1')));
+  await assertFails(getDocs(collection(m1.db, 'attendanceQuestions')));
+  assert.deepEqual(await staff.expectedAnswers('portal-talk', ['d1']), { d1: 'Catalysis' });
+
+  // One answer per session, only inside the window, and only as yourself while active.
+  await assertSucceeds(m1.portal.submitAnswer('portal-talk', 'd1', 'Catalysis'));
+  await assertFails(m1.portal.submitAnswer('portal-talk', 'd1', 'Changed my mind'));
+  await assertFails(m1.portal.submitAnswer('portal-talk', 'd2', 'Too early'));
+  await assertFails(m1.portal.submitAnswer('portal-talk', 'd3', 'Too late'));
+  await assertFails(
+    createPortalStore({ db: stranger.db, auth: { currentUser: { uid: stranger.uid } } }).submitAnswer('portal-talk', 'd1', 'Not a member'),
+  );
+  await assertFails(
+    setDoc(doc(m2.db, 'attendanceAnswers', 'portal-talk__d1__m2-uid'), {
+      uid: 'm2-uid',
+      eventId: 'portal-talk',
+      sessionId: 'd1',
+      answer: 'Pre-accepted',
+      submittedAt: serverTimestamp(),
+      status: 'accepted',
+    }),
+  );
+  await assertSucceeds(m2.portal.submitAnswer('portal-talk', 'd1', 'Something else'));
+
+  // Members cannot review; staff can. Members list only their own answers.
+  const id = 'portal-talk__d1__m1-uid';
+  await assertFails(updateDoc(doc(m1.db, 'attendanceAnswers', id), { status: 'accepted' }));
+  await assertFails(m1.portal.reviewAnswer(id, 'accepted'));
+  await assertSucceeds(staff.reviewAnswer(id, 'accepted'));
+  await assertFails(createPortalStore({ db: outreach.db, auth: { currentUser: { uid: outreach.uid } } }).reviewAnswers([id], 'pending'));
+  assert.equal((await m1.portal.myAnswers()).length, 1);
+  await assertFails(m1.portal.answers());
+  await assertFails(getDocs(collection(m1.db, 'attendanceAnswers')));
+  assert.equal((await staff.answers('portal-talk')).length, 2);
+  await assertFails(deleteDoc(doc(m1.db, 'attendanceAnswers', id)));
+  // Only the President (or the site owner) deletes: a session takes its answers with it.
+  await assertFails(staff.deleteAnswer(id));
+  await assertSucceeds(accounts.owner.cloud.portal.deleteSession('portal-talk', 'd1'));
+  assert.equal((await staff.answers('portal-talk')).length, 0);
+  assert.deepEqual(
+    (await staff.attendanceRecord('portal-talk')).sessions.map((x) => x.id),
+    ['d2', 'd3'],
+  );
+});
+
+test('portal directory: committee emails make executive profiles; officers become admins; the leaderboard is for members', async () => {
+  const owner = { ...accounts.owner, portal: portalAccount('owner-portal', OWNER).portal };
+  const vp = portalAccount('vp', 'vp@example.com');
+  const exec = portalAccount('exec', 'exec@example.com');
+  const outsider = portalAccount('outsider', 'outsider@example.com');
+  const committee = [
+    { name: 'Vice One', role: 'Vice President', memID: 'v-1', email: 'vp@example.com' },
+    { name: 'Exec One', role: 'Executive Member', memID: 'e-1', email: 'exec@example.com' },
+  ];
+  await assertSucceeds(owner.portal.syncDirectory('2027', committee, []));
+  await assertFails(setDoc(doc(vp.db, 'portalDirectory', 'vp@example.com'), { email: 'vp@example.com', role: 'president' }));
+  await assertFails(getDoc(doc(exec.db, 'portalDirectory', 'vp@example.com')));
+
+  const mine = await vp.portal.me();
+  assert.deepEqual([mine.status, mine.role, mine.designation, mine.memID], ['active', 'vice-president', 'Vice President', 'V-1']);
+  assert.equal((await exec.portal.me()).role, 'member');
+  // A profile cannot claim more than the directory says.
+  await assertFails(setDoc(doc(outsider.db, 'portalMembers', outsider.uid), profile(outsider, { status: 'active' })));
+  // The Vice President is board: approves claims and reads the directory.
+  await assertSucceeds(getDoc(doc(vp.db, 'portalDirectory', 'exec@example.com')));
+
+  await assertSucceeds(vp.portal.publishLeaderboard('2027', '2026–2027', 0, []));
+  await assertSucceeds(exec.portal.leaderboards());
+  await assertFails(getDocs(collection(outsider.db, 'leaderboard')));
+
+  // Dropped from the committee: the officer role is taken away the next time they sign in.
+  await assertSucceeds(owner.portal.syncDirectory('2027', committee.slice(1), committee));
+  assert.equal((await vp.portal.me()).role, 'member');
+
+  // The board adds executive members by email; they are active as soon as they sign in.
+  const added = portalAccount('added', 'added@example.com');
+  const row = { email: 'added@example.com', name: 'Added One', memID: 'A-1', year: '2027', designation: 'Executive Member' };
+  await assertFails(exec.portal.addMembers([row]));
+  await assertFails(createPortalStore({ db: accounts.admin.db, auth: { currentUser: { uid: accounts.admin.uid } } }).addMembers([row]));
+  const sec = portalAccount('d-sec', 'd-sec@example.com');
+  await env.withSecurityRulesDisabled((ctx) =>
+    setDoc(doc(ctx.firestore(), 'portalMembers', sec.uid), profile(sec, { role: 'secretary', designation: 'Secretary' })),
+  );
+  assert.equal(await sec.portal.addMembers([row]), 1);
+  const fresh = await added.portal.me();
+  assert.deepEqual([fresh.status, fresh.role, fresh.designation], ['active', 'member', 'Executive Member']);
+  // Only the President makes officers.
+  await assertFails(
+    setDoc(doc(sec.db, 'portalDirectory', 'boss@example.com'), {
+      ...row,
+      email: 'boss@example.com',
+      role: 'president',
+      updatedAt: serverTimestamp(),
+      updatedBy: sec.uid,
+    }),
+  );
+  // Correcting a member updates their directory entry too, so it sticks at their next sign-in.
+  await assertSucceeds(sec.portal.reviewMember(added.uid, { designation: 'Joint Secretary' }, fresh));
+  assert.equal((await added.portal.me()).designation, 'Joint Secretary');
+  // The Secretary cannot delete a profile; the site owner (like the President) can.
+  await assertFails(sec.portal.deleteMember(fresh));
+  await assertSucceeds(owner.portal.deleteMember(fresh));
+});
+
+test('portal work: tasks with points, contribution claims, notifications, notices and the monthly award', async () => {
+  const pres = portalAccount('w-pres', 'w-pres@example.com');
+  const treas = portalAccount('w-treas', 'w-treas@example.com');
+  const m1 = portalAccount('w-m1', 'w-m1@example.com');
+  const m2 = portalAccount('w-m2', 'w-m2@example.com');
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'portalMembers', pres.uid), profile(pres, { role: 'president', designation: 'President' }));
+    await setDoc(doc(db, 'portalMembers', treas.uid), profile(treas, { role: 'treasurer', designation: 'Treasurer' }));
+    await setDoc(doc(db, 'portalMembers', m1.uid), profile(m1, { designation: 'Executive Member' }));
+    await setDoc(doc(db, 'portalMembers', m2.uid), profile(m2));
+  });
+  const values = { title: 'Design the poster', points: 40, penalty: 10, dueDate: '2030-01-10', open: true };
+
+  // Tasks: the board creates and assigns; members cannot.
+  await assertFails(m1.portal.saveTask(values));
+  const taskId = await treas.portal.saveTask(values, '', [m1.uid]);
+  const task = (await m1.portal.tasks()).find((t) => t.id === taskId);
+  assert.equal(task.points, 40);
+  assert.equal((await m1.portal.notifications())[0].title, 'New task: Design the poster');
+  await assertFails(getDocs(collection(m2.db, 'taskWork')));
+  // A volunteer requests it; the board accepts.
+  await assertSucceeds(m2.portal.requestTask(taskId));
+  const work = await treas.portal.work(taskId);
+  await assertSucceeds(
+    treas.portal.reviewWork(
+      work.find((w) => w.uid === m2.uid),
+      task,
+      'assigned',
+    ),
+  );
+  // Members hand in their own work only, and cannot give themselves points.
+  await assertFails(updateDoc(doc(m2.db, 'taskWork', `${taskId}__${m1.uid}`), { status: 'submitted' }));
+  await assertSucceeds(m1.portal.submitWork(taskId, { note: 'Done', link: 'https://example.com/poster' }));
+  await assertFails(
+    updateDoc(doc(m1.db, 'taskWork', `${taskId}__${m1.uid}`), {
+      status: 'approved',
+      points: 40,
+      updatedAt: serverTimestamp(),
+      updatedBy: m1.uid,
+    }),
+  );
+  const mine = (await treas.portal.work(taskId)).find((w) => w.uid === m1.uid);
+  await assertSucceeds(treas.portal.reviewWork(mine, task, 'approved', { points: 36 }));
+  assert.equal((await m1.portal.myWork())[0].points, 36);
+
+  // The board can remove someone from a task; members cannot.
+  await assertFails(m1.portal.deleteWork(`${taskId}__${m2.uid}`));
+  await assertSucceeds(pres.portal.deleteWork(`${taskId}__${m2.uid}`));
+
+  // Contributions: closed until the board opens them; only the President or Secretary approves.
+  const contribution = { title: 'Ran the photo booth', eventId: 'portal-talk', tag: 'Event organising', date: '2026-03-01' };
+  await assertFails(m1.portal.claimContribution(contribution));
+  await assertFails(m1.portal.saveSettings({ claims: true }));
+  await assertSucceeds(treas.portal.saveSettings({ claims: true }));
+  await assertSucceeds(m1.portal.claimContribution(contribution));
+  const [claimed] = await treas.portal.contributions();
+  await assertFails(treas.portal.reviewContribution(claimed, 'approved', { points: 10 }));
+  await assertSucceeds(pres.portal.reviewContribution(claimed, 'approved', { points: 10 }));
+
+  // Notifications are private to their member; only staff send them.
+  await assertFails(m2.portal.notify([m1.uid], { title: 'Spoof' }));
+  const [first] = await m1.portal.notifications();
+  await assertFails(updateDoc(doc(m2.db, 'notifications', first.id), { read: true }));
+  await assertSucceeds(m1.portal.markRead([first.id]));
+
+  // Notices: the board posts, members read.
+  await assertFails(m1.portal.saveAnnouncement({ title: 'Hi' }));
+  await assertSucceeds(treas.portal.saveAnnouncement({ title: 'Meeting on Friday', body: 'Room 204' }, '', 'Treasurer'));
+  assert.equal((await m2.portal.announcements())[0].title, 'Meeting on Friday');
+
+  // Executive Member of the Month: President only, one certificate per month.
+  await assertFails(treas.portal.giveAward('2026-10', { uid: m1.uid, name: 'w-m1', designation: 'Executive Member' }));
+  await assertSucceeds(pres.portal.giveAward('2026-10', { uid: m1.uid, name: 'w-m1', designation: 'Executive Member' }, 'Poster campaign'));
+  assert.equal((await getDoc(doc(m2.db, 'certificates', 'EMOTM-2026-10'))).data().type, 'achievement');
+  await assert.rejects(pres.portal.giveAward('2026-10', { uid: m2.uid, name: 'w-m2' }), /already has/);
+  assert.equal((await m2.portal.awards())[0].name, 'w-m1');
+  // The President can withdraw an award with its certificate, and claims too.
+  const [award] = await pres.portal.awards();
+  await assertFails(treas.portal.deleteAward(award));
+  await assertSucceeds(pres.portal.deleteAward(award));
+  assert.equal((await getDoc(doc(m2.db, 'certificates', 'EMOTM-2026-10'))).exists(), false);
+  await assertFails(treas.portal.deleteContribution(claimed.id));
+  await assertSucceeds(pres.portal.deleteContribution(claimed.id));
+});
+
+test('instant attendance: officers open a session now; without a question it counts at once', async () => {
+  const pres = portalAccount('i-pres', 'i-pres@example.com');
+  const m = portalAccount('i-m', 'i-m@example.com');
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'events', 'quick-talk'), { id: 'quick-talk', title: 'Quick Talk' });
+    await setDoc(doc(db, 'portalMembers', pres.uid), profile(pres, { role: 'president' }));
+    await setDoc(doc(db, 'portalMembers', m.uid), profile(m));
+  });
+  const talk = { id: 'quick-talk', title: 'Quick Talk' };
+  await assertFails(m.portal.openSession(talk, { label: 'Day 1', minutes: 30 }));
+  await assertSucceeds(pres.portal.openSession(talk, { label: 'Day 1', minutes: 30 }));
+  await assertSucceeds(pres.portal.openSession(talk, { label: 'Day 2', minutes: 30, question: 'Colour?', answer: 'Blue' }));
+  const [plain, asked] = (await m.portal.attendanceRecord('quick-talk')).sessions;
+  await assertSucceeds(m.portal.submitAnswer('quick-talk', plain.id, '', { noQuestion: true }));
+  // A session with a question cannot be counted without review, and nobody marks twice.
+  await assertFails(m.portal.submitAnswer('quick-talk', asked.id, 'Blue', { noQuestion: true }));
+  await assertSucceeds(m.portal.submitAnswer('quick-talk', asked.id, 'Blue'));
+  await assertFails(m.portal.submitAnswer('quick-talk', plain.id, '', { noQuestion: true }));
+  // Closed sessions refuse answers.
+  await assertSucceeds(pres.portal.closeSession('quick-talk', plain.id));
+  assert.equal((await m.portal.myAnswers()).find((a) => a.sessionId === plain.id).status, 'accepted');
 });

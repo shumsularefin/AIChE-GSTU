@@ -1,7 +1,7 @@
-/* AIChE Student Chapter, GSTU — site theme, following aiche.org: a slim white header with a green Menu
-   button and a blue Join block; a deep navy hero with a large light headline and big numbers; a pale-blue
-   "pillars" band; full-width promo bands in navy, white, grey and mid-blue; a navy footer. Square corners,
-   AIChE sky blue for section titles and buttons, AIChE navy for links. */
+/* AIChE Student Chapter, GSTU — site theme. Takes aiche.org as a base (slim white header with a green Menu
+   button and a blue Join block, a deep navy hero with big numbers, a pale-blue "pillars" band, a navy
+   footer, square corners, AIChE sky blue and navy) and adds the chapter's own pieces: numbered "Start here"
+   tiles, "Stay connected" cards, attendance, and the Member Portal. */
 :root {
   --navy: #00304c;
   --navy-2: #0a4466;
@@ -128,8 +128,6 @@ a:hover .arrow-circle, .arrow-circle:hover { background: var(--blue); border-col
   .has-menu:hover > .submenu, .has-menu:focus-within > .submenu, .has-menu.open > .submenu { opacity: 1; visibility: visible; transform: none; }
 }
 .nav-mobile-extra { display: none; }
-.header-signin { flex: none; display: flex; align-items: center; padding: 0 30px; color: var(--link); font-size: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: .02em; text-decoration: none; }
-.header-signin:hover { color: var(--blue); }
 .header-join { flex: none; display: flex; align-items: center; padding: 0 28px; background: var(--sky); color: #fff; font-size: 18px; font-weight: 900; text-decoration: none; transition: background .2s; }
 .header-join:hover { background: var(--blue-deep); color: #fff; }
 /* Drawer of further links that the Menu button opens on wide screens. */
@@ -144,7 +142,6 @@ a:hover .arrow-circle, .arrow-circle:hover { background: var(--blue); border-col
   .nav-top { padding-left: 13px; font-size: 16px; }
   .nav-top::after { left: 13px; }
   .nav-list > li:not(.has-menu) > .nav-top { padding-right: 13px; }
-  .header-signin { padding: 0 20px; }
 }
 @media (max-width: 1080px) {
   .site-drawer { display: none; }
@@ -166,14 +163,12 @@ a:hover .arrow-circle, .arrow-circle:hover { background: var(--blue); border-col
   .submenu a { padding: 10px 16px; font-size: 16px; }
   .nav-mobile-extra { display: grid; gap: 2px; }
   .nav-mobile-extra a { padding: 8px 4px; color: var(--link); text-decoration: none; font-size: 16px; font-weight: 600; }
-  .header-signin { margin-left: auto; padding: 0 18px; }
   body.menu-open { overflow: hidden; }
 }
 @media (max-width: 520px) {
   .menu-toggle { width: 64px; }
   .brand { padding: 0 12px; }
   .brand img { width: 100px; }
-  .header-signin { display: none; }
   .header-join { margin-left: auto; padding: 0 20px; font-size: 16px; }
 }
 @media (prefers-reduced-motion: reduce) { .main-nav, .nav-top::after, .submenu, .bars span, .site-header, .site-drawer { transition: none; } }
@@ -241,7 +236,7 @@ a:hover .arrow-circle, .arrow-circle:hover { background: var(--blue); border-col
 
 /* ------------------------------------------------------------ homepage sections */
 section { position: relative; }
-.highlights, .vision, .contact, .story, .i-want { padding: clamp(56px, 7vw, 96px) 0; }
+.highlights, .vision, .contact, .story { padding: clamp(56px, 7vw, 96px) 0; }
 
 /* Our Three Pillars: a pale-blue band, centred title, three columns with an icon, a sky-blue heading,
    copy and a Learn more link. */
@@ -272,13 +267,35 @@ section { position: relative; }
 @media (max-width: 860px) { .feature-cards { grid-template-columns: 1fr; } }
 
 /* "I want to ...": a kicker title beside two columns of links. */
-.i-want { background: #fff; }
-.i-want-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 24px 48px; align-items: start; }
-.i-want-links { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0 40px; }
-.i-want-links a { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); color: var(--link); font-size: 18px; font-weight: 700; text-decoration: none; }
-.i-want-links a::after { content: ''; flex: none; width: 8px; height: 8px; border-top: 2.5px solid var(--sky); border-right: 2.5px solid var(--sky); transform: rotate(45deg); }
-.i-want-links a:hover { color: var(--blue); }
-@media (max-width: 860px) { .i-want-grid, .i-want-links { grid-template-columns: 1fr; } }
+/* "Start here": numbered tiles on a pale band (the chapter's own take, not aiche.org's link list). */
+.quick-links { padding: clamp(56px, 7vw, 88px) 0; background: var(--sky-soft); }
+.quick-head { display: flex; align-items: end; justify-content: space-between; gap: 12px 40px; flex-wrap: wrap; margin-bottom: 28px; }
+.quick-head p { margin: 0; max-width: 46ch; color: var(--muted); font-size: 17px; }
+.quick-title { margin: 0; color: var(--navy); font-size: clamp(28px, 3vw, 38px); font-weight: 900; }
+.quick-title::after { content: ''; display: block; width: 56px; height: 4px; margin-top: 10px; background: var(--green); }
+.quick-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.quick-grid a { position: relative; display: grid; gap: 4px; height: 100%; padding: 22px 52px 22px 22px; background: #fff; border-bottom: 3px solid transparent; color: var(--text); text-decoration: none; box-shadow: 0 1px 2px rgb(0 48 76 / 8%); transition: border-color .2s, transform .2s, box-shadow .2s; }
+.quick-grid a::after { content: ''; position: absolute; right: 24px; top: 50%; width: 9px; height: 9px; margin-top: -5px; border-top: 2.5px solid var(--sky); border-right: 2.5px solid var(--sky); transform: rotate(45deg); }
+.quick-grid a:hover, .quick-grid a:focus-visible { border-color: var(--sky); transform: translateY(-2px); box-shadow: 0 8px 20px rgb(0 48 76 / 12%); }
+.quick-num { color: var(--sky); font-size: 13px; font-weight: 900; letter-spacing: .1em; }
+.quick-grid b { color: var(--link); font-size: 19px; font-weight: 800; }
+.quick-grid small { color: var(--muted); font-size: 15px; }
+@media (max-width: 960px) { .quick-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 600px) { .quick-grid { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .quick-grid a { transition: none; } .quick-grid a:hover { transform: none; } }
+
+/* "Stay connected": two cards side by side to close the home page. */
+.connect { padding: clamp(56px, 7vw, 88px) 0; background: #fff; }
+.connect .quick-title { margin-bottom: 28px; }
+.connect-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.connect-card { display: grid; align-content: start; gap: 10px; padding: 30px 32px; background: var(--mist); border-left: 4px solid var(--green); }
+.connect-card h3 { margin: 0; color: var(--navy); font-size: 22px; font-weight: 800; }
+.connect-card p { margin: 0 0 6px; font-size: 17px; }
+.connect-card .promo-link { padding-left: 0; justify-self: start; }
+.connect-card-navy { background: var(--navy); border-left-color: var(--sky); }
+.connect-card-navy h3, .connect-card-navy p, .connect-card-navy .promo-link { color: #fff; }
+.connect-card-navy .promo-link:hover { color: var(--ice); }
+@media (max-width: 760px) { .connect-grid { grid-template-columns: 1fr; } }
 
 /* Promo bands (aiche.org "promo breakers"): a title and text beside text-link buttons divided by rules. */
 .promo { padding: clamp(32px, 4vw, 44px) 0; }
@@ -523,6 +540,7 @@ section { position: relative; }
 .footer-bottom { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-top: 22px; border-top: 1px solid rgb(255 255 255 / 14%); font-size: 14px; }
 .footer-bottom p { margin: 0; }
 .footer-bottom a { color: rgb(255 255 255 / 82%); }
+.footer-access { color: rgb(255 255 255 / 50%); }
 @media (max-width: 900px) { .footer-top { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .footer-cols { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 1080px) { .drawer-grid { grid-template-columns: 1fr 1fr; } }
@@ -728,3 +746,28 @@ fieldset.pf-q > legend.pf-label + * { clear: both; }
 .event-card:hover, .member-card:hover { border-bottom-color: var(--navy); }
 .event-card-overlay h2, .member-card h2 { color: var(--link); font-weight: 800; }
 .member-placeholder { color: #fff; }
+
+/* Home page: attendance open now (after "Become a member"). */
+.attendance-now { padding: 40px 0; background: var(--sky-soft); border-top: 4px solid var(--sky); }
+.attendance-now .eyebrow { margin: 0 0 4px; font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--sky); }
+.attendance-now h2 { margin: 0 0 18px; color: var(--navy); }
+.attendance-now-list { display: flex; flex-wrap: wrap; gap: 14px 22px; }
+.attendance-now-list div { display: grid; gap: 6px; justify-items: start; }
+.attendance-now-list small { color: var(--muted); }
+
+/* Sort choices (js/lib/sort-list.js): small text-like dropdowns ("Sort A to Z ⌄") that never change the
+   height of the line they sit on. They undo every field style and are only as wide as the chosen option;
+   sort-list.js sets the width where field-sizing is not supported. */
+.sort-bar { display: flex; justify-content: flex-end; margin: 0 0 6px; font-size: 0.85rem; line-height: 1.4; color: var(--muted); }
+.sort-bar label { display: inline-flex; align-items: baseline; gap: 4px; margin: 0; font-weight: 400; }
+.sort-bar label > span { margin: 0; font: inherit; color: inherit; }
+.sort-select { display: inline-flex; align-items: baseline; flex: none; margin-left: auto; gap: 4px; font-size: 0.8rem; font-weight: 400; line-height: 1.4; color: var(--muted); white-space: nowrap; }
+.sort-bar select, .sort-select select {
+  -webkit-appearance: none; appearance: none; field-sizing: content; box-sizing: content-box;
+  width: auto; min-width: 0; max-width: none; height: auto !important; min-height: 0 !important; margin: 0 !important; padding: 0 13px 0 2px !important;
+  border: 0 !important; border-radius: 0 !important; box-shadow: none !important; outline-offset: 2px;
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23003366' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 1px center / 9px 6px !important;
+  font: inherit; font-weight: 700; line-height: inherit; color: var(--link); cursor: pointer;
+}
+.sort-bar select:focus-visible, .sort-select select:focus-visible { outline: 2px solid var(--sky); }
+.has-sort { display: flex !important; align-items: baseline; gap: 8px; }

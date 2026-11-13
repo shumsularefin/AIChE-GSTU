@@ -13,11 +13,21 @@ rules_version = '2';
 //   certificateLookup/{hash}  public   SHA-256(eventId + membership ID) -> credential IDs
 //   certificateEvents/{id}    public   Certificate Center event list
 //   siteImages/{id}           public   uploaded, optimized JPEG images
+//   imageCleanup/state        private  first day each uploaded image was seen unused (30-day cleanup)
 //   forms/{id}                public   website forms (registration, feedback) built in the dashboard
 //   forms/{id}/responses/{r}  private  answers; anyone may add one while the form is open
 //   chapterEditors/{email}    private  editor grants managed by the super-admin
 //   auditLogs/{id}            private  append-only activity log (server timestamps)
 //   removals/{key}            private  tombstones that tie a deletion to its log entry
+//
+// Member Portal (portal.html):
+//   portalMembers/{uid}       private  a member's profile claim, approval status and portal role
+//   attendance/{eventId}      public   attendance sessions of an event (one per day, 2-hour windows)
+//   attendanceQuestions/{id}  members  a session's verification question, readable once the session opens
+//   attendanceKeys/{id}       private  the expected answer, for reviewers only
+//   attendanceAnswers/{id}    private  one answer per member and session (eventId__sessionId__uid)
+//   portalDirectory/{email}   private  executive members by email (from the Team page, or added by the board)
+//   leaderboard/{fiscalYear}  members  attendance leaderboard of a fiscal year, published by reviewers
 //
 // Every write carries an auditId. The rules check that the referenced log entry is
 // created in the same request by the same person, with the same server timestamp.
@@ -40,6 +50,21 @@ service cloud.firestore {
     function role() { return !signedInWithGoogle() ? '' : isOwner() ? 'super-admin' : grantedRole(); }
     function isSuperAdmin() { return role() == 'super-admin'; }
     function isEditor() { return role() in ['super-admin', 'administrator', 'outreach']; }
+
+    // Member Portal roles, separate from the Chapter Editor roles above: the four main officers form the
+    // board, and the President has the last word. Chapter Editor grants give no portal powers; only the site
+    // owner's account also counts as board, so the portal can be recovered if no officer is left.
+    function portalOwner() { return signedInWithGoogle() && isOwner(); }
+    function memberPath() { return /databases/$(database)/documents/portalMembers/$(request.auth.uid); }
+    function portalMember() { return get(memberPath()).data; }
+    function isActiveMember() { return signedInWithGoogle() && exists(memberPath()) && portalMember().status == 'active'; }
+    function officer() {
+      return isActiveMember() && portalMember().role in ['president', 'vice-president', 'secretary', 'treasurer'];
+    }
+    function isBoard() { return portalOwner() || officer(); }
+    function isPresident() { return portalOwner() || (isActiveMember() && portalMember().role == 'president'); }
+    // Attendance is opened and reviewed by the board in the portal.
+    function attendanceStaff() { return isBoard(); }
 
     // ---------------------------------------------------------------- audit
 
@@ -74,7 +99,7 @@ service cloud.firestore {
 
     match /auditLogs/{id} {
       allow read: if isSuperAdmin();
-      allow create: if isEditor()
+      allow create: if (isEditor() || (isPresident() && request.resource.data.action == 'certificate.issue'))
         && request.resource.data.keys().hasOnly(['actorUid', 'actorEmail', 'action', 'target', 'detail', 'createdAt', 'ids'])
         && request.resource.data.actorUid == request.auth.uid
         && request.resource.data.actorEmail == email()
@@ -182,10 +207,12 @@ service cloud.firestore {
 
     // Private membership IDs for a roster year, keyed by the public roster entry key.
     match /rosterPrivate/{year} {
-      allow get, list: if isSuperAdmin();
+      // The portal board checks membership IDs when approving profile claims.
+      allow get, list: if isSuperAdmin() || isBoard();
       allow create, update: if isSuperAdmin() && year.matches('^20[0-9]{2}$') && nextRevision()
-        && request.resource.data.keys().hasOnly(['ids'].concat(pageMeta())) && request.resource.data.ids is map
+        && request.resource.data.keys().hasOnly(['ids', 'execs'].concat(pageMeta())) && request.resource.data.ids is map
         && request.resource.data.ids.size() <= 3000
+        && request.resource.data.get('execs', []) is list && request.resource.data.get('execs', []).size() <= 200
         && (migrating() || stamped('team.update', year));
       allow delete: if isSuperAdmin() && removed('rosterPrivate:' + year, 'team.delete', year);
     }
@@ -203,6 +230,18 @@ service cloud.firestore {
       allow update: if false;
       allow delete: if isEditor() && (isSuperAdmin() || resource.data.createdBy == request.auth.uid)
         && removed('siteImages:' + id, 'image.delete', id);
+    }
+
+    // Bookkeeping only (no site content): image id -> the day it was first seen unused. Any editor's
+    // dashboard clears the images its own drafts use; the super-admin's adds and removes the rest.
+    match /imageCleanup/{doc} {
+      allow read: if isEditor();
+      allow create, update: if isEditor() && doc == 'state'
+        && request.resource.data.keys().hasOnly(['unusedSince', 'checkedOn', 'updatedAt', 'updatedBy'])
+        && request.resource.data.unusedSince is map && request.resource.data.unusedSince.size() <= 5000
+        && request.resource.data.checkedOn is string && request.resource.data.checkedOn.size() <= 10
+        && request.resource.data.updatedAt == request.time && request.resource.data.updatedBy == request.auth.uid;
+      allow delete: if false;
     }
 
     // ---------------------------------------------------------------- editors
@@ -243,7 +282,12 @@ service cloud.firestore {
       // Records created before the split may still hold a membership ID; those stay private until migrated.
       allow get: if resource == null || resource.data.get('memID', '') == '' || isEditor();
       allow list: if isSuperAdmin();
-      allow create: if isEditor() && certificateFields(certId) && mayIssue(request.resource.data.type)
+      allow create: if certificateFields(certId)
+        && ((isEditor() && mayIssue(request.resource.data.type))
+          // The portal President issues the Executive Member of the Month certificate, one per month.
+          || (isPresident() && request.resource.data.type == 'achievement' && request.resource.data.eventId == 'member-of-the-month'
+            && certId.matches('^EMOTM-20[0-9]{2}-[0-9]{2}$')
+            && getAfter(/databases/$(database)/documents/monthAwards/$(certId.split('-')[1] + '-' + certId.split('-')[2])).data.certId == certId))
         && auditedBatch(request.resource.data.auditId, ['certificate.issue'], certId);
       allow update: if isSuperAdmin() && (
           // Revoke: status changes only, never reissued.
@@ -258,7 +302,10 @@ service cloud.firestore {
             && auditedBatch(request.resource.data.auditId, ['certificate.migrate'], certId)));
       // Only revoked records (for example test certificates) can be removed, by a super-admin, with a log entry.
       allow delete: if isSuperAdmin() && resource.data.get('status', 'issued') == 'revoked'
-        && removed('certificates:' + certId, 'certificate.delete', certId);
+        && removed('certificates:' + certId, 'certificate.delete', certId)
+        // The President withdraws an Executive Member of the Month award together with its certificate.
+        || (isPresident() && certId.matches('^EMOTM-20[0-9]{2}-[0-9]{2}$')
+          && !existsAfter(/databases/$(database)/documents/monthAwards/$(certId.replace('^EMOTM-', ''))));
     }
 
     match /certificatePrivate/{certId} {
@@ -350,6 +397,259 @@ service cloud.firestore {
           && request.resource.data.verifiedAt == request.time;
         allow delete: if isSuperAdmin() && removed('formResponses:' + formId, 'form.responses.delete', formId);
       }
+    }
+
+    // ---------------------------------------------------------------- Member Portal
+
+    function memberFields(d, uid) {
+      return d.keys().hasOnly(['uid', 'email', 'name', 'memID', 'rosterYear', 'designation', 'role', 'status',
+             'createdAt', 'updatedAt', 'updatedBy', 'reviewedBy', 'reviewedAt'])
+        && d.uid == uid && d.email is string && d.email.size() <= 200
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 160
+        && d.memID is string && d.memID.size() > 0 && d.memID.size() <= 40
+        && d.rosterYear is string && d.rosterYear.matches('^20[0-9]{2}$')
+        && shortText(d.designation, 120)
+        && d.role in ['member', 'president', 'vice-president', 'secretary', 'treasurer']
+        && d.status in ['pending', 'active', 'removed']
+        && d.updatedAt == request.time && d.updatedBy == request.auth.uid;
+    }
+    function sameKeys(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+
+    // Executive committee members by Google email. Their portal profile is created and kept in step from it.
+    match /portalDirectory/{email} {
+      // The Chapter Editor super-admin keeps it in step with the committee on the Team page; the board adds
+      // members (by hand or from Excel). Officer entries are the President's.
+      allow get: if signedInWithGoogle() && (email == email() || isBoard() || isSuperAdmin());
+      allow list: if isBoard();
+      allow create, update: if (isSuperAdmin() || (isBoard() && (isPresident()
+          || (request.resource.data.role == 'member' && (resource == null || resource.data.role == 'member')))))
+        && request.resource.data.keys().hasOnly(['email', 'name', 'memID', 'designation', 'role', 'year', 'updatedAt', 'updatedBy'])
+        && request.resource.data.email == email && request.resource.data.year.matches('^20[0-9]{2}$')
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 160
+        && request.resource.data.memID is string && request.resource.data.memID.size() > 0 && request.resource.data.memID.size() <= 40
+        && shortText(request.resource.data.designation, 120)
+        && request.resource.data.role in ['member', 'president', 'vice-president', 'secretary', 'treasurer']
+        && request.resource.data.updatedAt == request.time && request.resource.data.updatedBy == request.auth.uid;
+      allow delete: if isSuperAdmin() || isPresident() || (isBoard() && resource.data.role == 'member');
+    }
+    function directoryPath() { return /databases/$(database)/documents/portalDirectory/$(email()); }
+    function fromDirectory(d) {
+      let e = get(directoryPath()).data;
+      return exists(directoryPath()) && d.status == 'active' && d.name == e.name && d.memID == e.memID
+        && d.rosterYear == e.year && d.designation == e.designation && d.role == e.role;
+    }
+
+    match /portalMembers/{uid} {
+      allow get: if signedInWithGoogle() && (request.auth.uid == uid || isBoard());
+      allow list: if isBoard();
+      // A member claims their own profile; it waits for one board approval.
+      allow create: if signedInWithGoogle() && request.auth.uid == uid && memberFields(request.resource.data, uid)
+        && request.resource.data.email == email() && request.resource.data.createdAt == request.time
+        && !('reviewedBy' in request.resource.data) && !('reviewedAt' in request.resource.data)
+        && ((request.resource.data.status == 'pending' && request.resource.data.role == 'member' && request.resource.data.designation == '')
+          || fromDirectory(request.resource.data));
+      allow update: if memberFields(request.resource.data, uid) && (
+          // An executive member's profile follows the portal directory, unless the board removed it.
+          (request.auth.uid == uid && resource.data.status != 'removed' && fromDirectory(request.resource.data)
+            && sameKeys(['name', 'memID', 'rosterYear', 'designation', 'role', 'status', 'updatedAt', 'updatedBy']))
+          ||
+          // The member corrects a claim that is still waiting.
+          (request.auth.uid == uid && resource.data.status == 'pending' && request.resource.data.status == 'pending'
+            && sameKeys(['name', 'memID', 'rosterYear', 'updatedAt', 'updatedBy']))
+          // The board approves, corrects or removes. Officers' profiles and roles are the President's (or super-admin's).
+          || (isBoard() && (request.auth.uid != uid || portalOwner())
+            && sameKeys(['name', 'memID', 'rosterYear', 'designation', 'role', 'status', 'updatedAt', 'updatedBy', 'reviewedBy', 'reviewedAt'])
+            && request.resource.data.reviewedBy == request.auth.uid && request.resource.data.reviewedAt == request.time
+            && ((resource.data.role == 'member' && request.resource.data.role == 'member') || isPresident())));
+      allow delete: if signedInWithGoogle() && ((request.auth.uid == uid && resource.data.status == 'pending') || isPresident());
+    }
+
+    function sessionList(sessions) { return sessions is list && sessions.size() <= 31; }
+
+    // Public, so event pages can show a "Mark attendance" button while a session is open.
+    match /attendance/{eventId} {
+      allow get, list: if true;
+      allow create, update: if attendanceStaff() && exists(/databases/$(database)/documents/events/$(eventId))
+        && request.resource.data.keys().hasOnly(['eventId', 'title', 'sessions', 'updatedAt', 'updatedBy'])
+        && request.resource.data.eventId == eventId && shortText(request.resource.data.title, 200)
+        && sessionList(request.resource.data.sessions)
+        && request.resource.data.updatedAt == request.time && request.resource.data.updatedBy == request.auth.uid;
+      allow delete: if attendanceStaff();
+    }
+
+    function sessionDoc(d, id) {
+      return d.keys().hasOnly(['eventId', 'sessionId', 'question', 'opensAt', 'closesAt', 'updatedAt', 'updatedBy'])
+        && id == d.eventId + '__' + d.sessionId && shortText(d.sessionId, 20)
+        && shortText(d.question, 500)
+        && d.opensAt is timestamp && d.closesAt is timestamp && d.closesAt > d.opensAt
+        && d.updatedAt == request.time && d.updatedBy == request.auth.uid;
+    }
+
+    // The question stays hidden from members until its session opens.
+    match /attendanceQuestions/{id} {
+      allow get: if attendanceStaff() || (isActiveMember() && request.time >= resource.data.opensAt);
+      allow list: if attendanceStaff();
+      allow create, update: if attendanceStaff() && sessionDoc(request.resource.data, id);
+      allow delete: if attendanceStaff();
+    }
+
+    match /attendanceKeys/{id} {
+      allow read: if attendanceStaff();
+      allow create, update: if attendanceStaff() && request.resource.data.keys().hasOnly(['answer', 'updatedAt', 'updatedBy'])
+        && shortText(request.resource.data.answer, 500)
+        && request.resource.data.updatedAt == request.time && request.resource.data.updatedBy == request.auth.uid;
+      allow delete: if attendanceStaff();
+    }
+
+    function questionOf(d) {
+      return get(/databases/$(database)/documents/attendanceQuestions/$(d.eventId + '__' + d.sessionId)).data;
+    }
+    match /attendanceAnswers/{id} {
+      allow get: if signedInWithGoogle() && (resource.data.uid == request.auth.uid || attendanceStaff());
+      allow list: if attendanceStaff() || (signedInWithGoogle() && resource.data.uid == request.auth.uid);
+      // One answer per member and session, only while the 2-hour window is open.
+      allow create: if isActiveMember()
+        && request.resource.data.keys().hasOnly(['uid', 'eventId', 'sessionId', 'answer', 'submittedAt', 'status'])
+        && request.resource.data.uid == request.auth.uid
+        && id == request.resource.data.eventId + '__' + request.resource.data.sessionId + '__' + request.auth.uid
+        && shortText(request.resource.data.answer, 500)
+        && request.resource.data.submittedAt == request.time
+        // Counted at once when the session has no question; otherwise it waits for review.
+        && (request.resource.data.status == 'pending'
+          || (request.resource.data.status == 'accepted' && questionOf(request.resource.data).question == ''))
+        && request.time >= questionOf(request.resource.data).opensAt && request.time < questionOf(request.resource.data).closesAt;
+      allow update: if attendanceStaff()
+        && sameKeys(['status', 'reviewedBy', 'reviewedAt', 'note'])
+        && request.resource.data.status in ['pending', 'accepted', 'rejected'] && shortText(request.resource.data.get('note', ''), 300)
+        && request.resource.data.reviewedBy == request.auth.uid && request.resource.data.reviewedAt == request.time;
+      allow delete: if isPresident();
+    }
+
+    // Fiscal-year attendance leaderboard for executive members; reviewers publish it.
+    match /leaderboard/{year} {
+      allow get, list: if isActiveMember() || attendanceStaff();
+      allow create, update: if attendanceStaff() && year.matches('^20[0-9]{2}$')
+        && request.resource.data.keys().hasOnly(['year', 'label', 'total', 'rows', 'updatedAt', 'updatedBy'])
+        && request.resource.data.year == year && request.resource.data.rows is list && request.resource.data.rows.size() <= 1000
+        && request.resource.data.updatedAt == request.time && request.resource.data.updatedBy == request.auth.uid;
+      allow delete: if isPresident();
+    }
+
+    // Tasks, contributions, notifications, notices and awards.
+    function stampedNow(d) { return d.updatedAt == request.time && d.updatedBy == request.auth.uid; }
+    function portalReader() { return isActiveMember() || attendanceStaff(); }
+    function points(v) { return v is int && v >= 0 && v <= 1000; }
+    function settingsPath() { return /databases/$(database)/documents/portalSettings/main; }
+    function claimsOpen() { return exists(settingsPath()) && get(settingsPath()).data.claims == true; }
+    function contributionReviewer() {
+      return portalOwner() || (isActiveMember() && portalMember().role in ['president', 'secretary']);
+    }
+
+    match /portalSettings/{doc} {
+      allow get: if portalReader();
+      allow write: if isBoard() && doc == 'main' && request.resource.data.keys().hasOnly(['claims', 'updatedAt', 'updatedBy'])
+        && request.resource.data.claims is bool && stampedNow(request.resource.data);
+    }
+
+    match /announcements/{id} {
+      allow read: if portalReader();
+      allow create, update: if isBoard()
+        && request.resource.data.keys().hasOnly(['title', 'body', 'pinned', 'author', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+        && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 160
+        && shortText(request.resource.data.body, 3000) && request.resource.data.pinned is bool
+        && shortText(request.resource.data.author, 160) && stampedNow(request.resource.data);
+      allow delete: if isBoard();
+    }
+
+    match /notifications/{id} {
+      allow read: if signedInWithGoogle() && resource.data.uid == request.auth.uid;
+      allow create: if isBoard()
+        && request.resource.data.keys().hasOnly(['uid', 'title', 'body', 'link', 'read', 'createdAt', 'createdBy'])
+        && request.resource.data.uid is string && shortText(request.resource.data.title, 160)
+        && shortText(request.resource.data.body, 500) && shortText(request.resource.data.link, 200)
+        && request.resource.data.read == false && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if signedInWithGoogle() && resource.data.uid == request.auth.uid && sameKeys(['read'])
+        && request.resource.data.read == true;
+      allow delete: if signedInWithGoogle() && resource.data.uid == request.auth.uid;
+    }
+
+    function taskPath(id) { return /databases/$(database)/documents/portalTasks/$(id); }
+    match /portalTasks/{id} {
+      allow read: if portalReader();
+      allow create, update: if isBoard()
+        && request.resource.data.keys().hasOnly(['title', 'details', 'eventId', 'points', 'penalty', 'dueAt', 'open', 'status',
+             'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+        && shortText(request.resource.data.get('eventId', ''), 100)
+        && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 160
+        && shortText(request.resource.data.details, 2000) && points(request.resource.data.points)
+        && request.resource.data.penalty is int && request.resource.data.penalty >= 0 && request.resource.data.penalty <= 100
+        && request.resource.data.dueAt is timestamp && request.resource.data.open is bool
+        && request.resource.data.status in ['open', 'closed'] && stampedNow(request.resource.data);
+      allow delete: if isBoard();
+    }
+
+    // One document per task and member: requested -> assigned -> submitted -> approved (or returned).
+    match /taskWork/{id} {
+      allow get: if signedInWithGoogle() && (resource.data.uid == request.auth.uid || attendanceStaff());
+      allow list: if attendanceStaff() || (signedInWithGoogle() && resource.data.uid == request.auth.uid);
+      allow create: if request.resource.data.keys().hasOnly(['taskId', 'uid', 'status', 'createdAt', 'updatedAt', 'updatedBy'])
+        && id == request.resource.data.taskId + '__' + request.resource.data.uid && exists(taskPath(request.resource.data.taskId))
+        && request.resource.data.createdAt == request.time && stampedNow(request.resource.data)
+        && ((isBoard() && request.resource.data.status == 'assigned')
+          // A member asks to take on a task that is open for requests.
+          || (isActiveMember() && request.resource.data.uid == request.auth.uid && request.resource.data.status == 'requested'
+            && get(taskPath(request.resource.data.taskId)).data.open == true
+            && get(taskPath(request.resource.data.taskId)).data.status == 'open'));
+      allow update: if stampedNow(request.resource.data) && (
+          // The member hands in their work.
+          (resource.data.uid == request.auth.uid && isActiveMember() && resource.data.status in ['assigned', 'returned']
+            && request.resource.data.status == 'submitted' && request.resource.data.submittedAt == request.time
+            && shortText(request.resource.data.note, 2000) && shortText(request.resource.data.link, 500)
+            && sameKeys(['status', 'note', 'link', 'submittedAt', 'updatedAt', 'updatedBy']))
+          // The board assigns a request, approves with points or returns it; never their own work.
+          || (isBoard() && (resource.data.uid != request.auth.uid || portalOwner())
+            && request.resource.data.status in ['assigned', 'returned', 'approved']
+            && sameKeys(['status', 'points', 'feedback', 'reviewedBy', 'reviewedAt', 'updatedAt', 'updatedBy'])
+            && (!('points' in request.resource.data) || points(request.resource.data.points))
+            && shortText(request.resource.data.get('feedback', ''), 500)
+            && (request.resource.data.status == 'assigned'
+              || (request.resource.data.reviewedBy == request.auth.uid && request.resource.data.reviewedAt == request.time))));
+      allow delete: if isBoard() || (signedInWithGoogle() && resource.data.uid == request.auth.uid && resource.data.status == 'requested');
+    }
+
+    // Past contributions a member claims; the President or Secretary approves them with points.
+    match /contributions/{id} {
+      allow get: if signedInWithGoogle() && (resource.data.uid == request.auth.uid || attendanceStaff());
+      allow list: if attendanceStaff() || (signedInWithGoogle() && resource.data.uid == request.auth.uid);
+      allow create: if isActiveMember() && claimsOpen()
+        && request.resource.data.keys().hasOnly(['uid', 'title', 'details', 'eventId', 'tag', 'date', 'link', 'status', 'submittedAt'])
+        && shortText(request.resource.data.get('eventId', ''), 100)
+        && request.resource.data.uid == request.auth.uid && request.resource.data.status == 'pending'
+        && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 160
+        && shortText(request.resource.data.details, 2000) && shortText(request.resource.data.tag, 40)
+        && request.resource.data.date is string && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && shortText(request.resource.data.link, 500) && request.resource.data.submittedAt == request.time;
+      allow update: if contributionReviewer() && (resource.data.uid != request.auth.uid || portalOwner())
+        && sameKeys(['status', 'points', 'note', 'reviewedBy', 'reviewedAt'])
+        && request.resource.data.status in ['approved', 'rejected'] && points(request.resource.data.points)
+        && shortText(request.resource.data.note, 300)
+        && request.resource.data.reviewedBy == request.auth.uid && request.resource.data.reviewedAt == request.time;
+      allow delete: if isPresident() || (signedInWithGoogle() && resource.data.uid == request.auth.uid && resource.data.status == 'pending');
+    }
+
+    // Executive Member of the Month, named by the President with a certificate (see certificates).
+    match /monthAwards/{month} {
+      allow read: if portalReader();
+      allow create: if isPresident() && month.matches('^20[0-9]{2}-(0[1-9]|1[0-2])$')
+        && request.resource.data.keys().hasOnly(['month', 'uid', 'name', 'designation', 'reason', 'certId', 'createdAt', 'createdBy'])
+        && request.resource.data.month == month && request.resource.data.certId == 'EMOTM-' + month
+        && request.resource.data.uid is string && shortText(request.resource.data.name, 160)
+        && shortText(request.resource.data.designation, 160) && shortText(request.resource.data.reason, 220)
+        && existsAfter(/databases/$(database)/documents/certificates/$(request.resource.data.certId))
+        && request.resource.data.createdAt == request.time && request.resource.data.createdBy == request.auth.uid;
+      allow update: if false;
+      allow delete: if isPresident();
     }
 
     // ---------------------------------------------------------------- retired layout (read-only)

@@ -18,6 +18,8 @@ If someone else published the same section while you were editing, you are asked
 - **Events → + New event.** Give it a title, category, start date, and an **end date** for events that run over several days. Times are optional and use Bangladesh time.
 - The **registration link is optional.** Set Registration to **Open** to show the "Explore new event & register" button on the homepage. It disappears by itself after the event ends.
 - **Upload from device** adds a photo; it is resized and optimized automatically. **Choose uploaded image** reuses one. You never type file paths.
+- **Choose uploaded image** opens the image library. Search by file name, event, person or month; **Show** narrows it to images used by events, team & members, the homepage and membership page, forms, unpublished drafts, or **Unused**; **Order** sorts newest or oldest first. Images are grouped by the month they were uploaded, and each one says where it is used.
+- **Unused images are removed automatically after 30 days.** The clock starts the first day the dashboard sees an image unused and restarts if the image is used again (also in a draft). The library shows the removal date under each unused image; **Delete now** removes one earlier. The check runs when the super-admin opens the dashboard (at most once a day). An image kept only in another editor's draft stays safe as long as that editor opens the dashboard at least once a month.
 - **Preview** shows the event page before publishing.
 - Outreach editors can edit the events they added. Only a super-admin can delete events.
 - Super-admins can import many events from a spreadsheet: each becomes a draft to review and publish.
@@ -38,6 +40,8 @@ Your choices for each year are remembered in this browser. To change an event's 
 ## Sharing forms
 
 Every published form has its own short address, for example `https://aiche-gstu.web.app/form-membership-2026.html`. Copy it from **Forms** (Copy link) and post it in WhatsApp or Messenger groups: it opens that form directly, and the link preview shows the form's title and description. New forms work at once; the preview appears after the next automatic rebuild (within about 15 minutes).
+
+**QR code:** when a new form is published, its **Link & QR code** window opens by itself (it is also on every form and its Responses tab). The QR code opens the form's own page; **Download QR code (PNG)** gives a 1200 × 1200 image for posters and slides, and **QR code (SVG)** a vector file that stays sharp at any size.
 
 ## Homepage images and membership
 
@@ -73,8 +77,57 @@ When it finishes you get each recipient's link, a Copy link button, a PDF downlo
 - **Certificate Center list** (super-admin): hide test or temporary events from the public list.
 - **Issued records** (super-admin): every certificate issued, with its status.
 
+## Member Portal and attendance
+
+The Member Portal is at `/portal.html` (the footer and the Chapter Editor menu link to it). It is separate from the Chapter Editor but uses the same Google sign-in.
+
+**Two separate sets of roles.** Chapter Editor roles (super-admin, chapter administrator, outreach editor) cover the public website only and give no portal access. Portal roles are the four officers (President, Vice President, Secretary, Treasurer), who run the portal, and members. The President has the last word and can delete anything in the portal. Only the site owner's own account also has full portal access, so the portal can always be recovered.
+
+**Adding executive members.** Under **Manage → Members**, any officer can add people by Google email, by hand or with **Upload Excel** (columns Name, Email, Membership ID, and optionally Year and Designation; **Download the Excel template** gives the layout). The first time they sign in with that email they get an active executive-member profile, with no claim or approval. Until then they are listed under *Added, not signed in yet*.
+
+**Executive members.** In **Team & rosters**, every executive committee member of a year needs an **AIChE membership ID** and a **Google email** (private; the year cannot be published without them). Publishing the year creates their Member Portal profile automatically the first time they sign in with that email; nobody has to approve them. Members whose role is exactly *President*, *Vice President*, *Secretary* (or *General Secretary*) or *Treasurer* become portal admins. Remove someone from the committee and they lose their executive designation and admin rights the next time they sign in.
+
+**Leaderboard.** Executive members see the leaderboard of the fiscal year (1 June to 31 May), ranked by points, then attendance. It updates whenever a reviewer accepts or rejects attendance, or opens **Rankings**.
+
+**Tasks.** Under **Manage → Tasks**, a portal admin (President, Vice President, Secretary or Treasurer) creates a task (optionally for an event, picked from a list with the newest first, plus its own title) with points, a due date and a late deduction (a percentage of the points for each day late), and assigns it to members, or opens it for volunteers to request. Members hand in their work under **My tasks**; the admin approves it (the points are filled in with the deduction applied, and can be changed) or returns it for changes. Officers cannot approve their own work.
+
+**Contribution claims.** Members can claim past work while claims are open: they pick the event from a list, or *Not an event* and describe it, then add a tag, date and proof link. Any portal admin opens or closes claims under **Manage → Contribution claims**; only the President or Secretary approves them with points.
+
+**Notices and notifications.** Admins post notices that every member sees on their home page. Members get a notification when they are approved, given a task, or their work or claim is reviewed; the menu shows the unread count.
+
+**Executive Member of the Month.** Only the President names one executive member a month under **Manage → Member of the Month**. This issues a verifiable *Executive Member of the Month* certificate (its own simple design; credential `EMOTM-YYYY-MM`) and shows the award on every member's home page. Deleting the award also deletes its certificate, and the month can then be awarded again.
+
+**Deleting.** The President can delete members, attendance sessions (with their answers), single answers, tasks and people's work on them, contribution claims, notices and awards. Officers can delete tasks and notices.
+
+**Members**
+
+1. Sign in with Google and **link your membership**: full name, AIChE membership ID and membership year.
+2. One board member approves the profile. The portal then shows **Attendance open now** and your own record.
+
+**The board** (President, Vice President, Secretary, Treasurer) uses **Members**:
+
+- Pending claims show whether the ID is on that year's roster, and whether another profile claims the same ID. **Approve**, **Edit** (name, ID, year, designation) or **Remove**; removed profiles can be restored.
+- Only the **President** can give someone an officer role, change an officer's profile, or **Delete** a profile for good.
+- **Export** downloads all profiles to Excel.
+
+**Opening attendance (the four officers, in the portal):** open **Attendance** under *Manage*.
+
+- Pick the event, a title (filled in as *Day 1*, *Day 2*, …) and how long it stays open (10 minutes to 6 hours), then press **Open attendance**. It opens at once.
+- The verification question is optional. Without one, a member's attendance counts immediately. With one, the board reviews the answers.
+- **+15 min** extends an open session and **Close now** ends it.
+- While a session is open, the home page shows a **Mark attendance** button right after *Become a member*. The event page shows one too.
+- Members sign in with Google and press one button; their name and membership ID come from their approved profile. Each member can answer only once per session.
+
+**Reviewing (editors with the Administrator or Outreach role, and the board):** **Attendance review** lists the answers for a day, with a *Matches / Close / Differs* check against the expected answer and a flag for long answers copied word for word. Accept or reject one by one, or use **Accept all matching** (matching answers that are not copied) or **Accept all pending**. Accepted answers count as attended.
+
+**Rankings** shows each active member's attendance rate for a year (or all years). **Download attendance (Excel)** gives a *Register* sheet: one row per member, Present/Absent for every session, then total sessions, attended, missed and attendance %. **Members** shows each member's attendance for the year. There is no fixed renewal threshold; the board and advisors decide.
+
 ## Your account, editors and backups
 
 - **Your account & sign-in:** shows your role and exactly what you can do. Signing out keeps your drafts in this browser.
 - **Manage editors & activity** (super-admin): add, change, disable or remove editors, and read the activity log: who changed what and when, with server times.
 - **Backups** (super-admin): download all published content as JSON or Excel. It includes private IDs, so keep it safe. Restoring a backup loads it into drafts for review.
+
+## Sorting lists
+
+Every list that keeps growing (events, news, certificates, forms and responses, images, members, tasks, claims, notices, sessions and so on) shows a **Sort** dropdown once it has three or more items: newest or oldest first (or as listed / reverse when the list has no dates), and A to Z or Z to A. Each browser remembers the choice for each list. New lists in the Chapter Editor and the Member Portal get the dropdown automatically. To keep a list in a fixed order, give it the `data-nosort` attribute.

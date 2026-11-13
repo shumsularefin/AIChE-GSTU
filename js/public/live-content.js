@@ -2,7 +2,9 @@
 // content published after the last build. Filters change in place, without a page reload.
 import { contentSignature } from '../lib/content-model.js';
 import { renderEvents, renderEvent, renderTeam, renderMembership, renderNews, renderNewsHighlights } from '../lib/content-render.js';
-import { bakedContent, freshContent, renderReady } from './site-data.js';
+import { bakedContent, freshContent, renderReady, rest } from './site-data.js';
+import { sessionState } from '../lib/portal-model.js';
+import { TIMEZONE } from '../lib/content-model.js';
 
 const SITE = 'AIChE Student Chapter, GSTU';
 
@@ -68,7 +70,69 @@ function revealTop(root) {
   target.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
 }
 
+const clockFormat = new Intl.DateTimeFormat('en-GB', { timeZone: TIMEZONE, hour: 'numeric', minute: '2-digit', hour12: true });
+
+/** Adds "Members: mark attendance" to an event page whose attendance is set up. Silent when it cannot load. */
+async function addAttendanceLink(root, eventId) {
+  if (!eventId) return;
+  try {
+    const record = await (await rest()).get(`attendance/${encodeURIComponent(eventId)}`);
+    root.querySelector('[data-attendance-link]')?.remove();
+    if (!record?.sessions?.length || root.dataset.view !== 'event') return;
+    const open = record.sessions.filter((s) => sessionState(s) === 'open').sort((a, b) => Date.parse(a.closesAt) - Date.parse(b.closesAt))[0];
+    const holder = document.createElement('div');
+    holder.dataset.attendanceLink = '';
+    holder.className = 'event-register';
+    const link = document.createElement('a');
+    link.className = open ? 'button' : 'button secondary';
+    link.href = `portal.html#attend/${encodeURIComponent(eventId)}`;
+    link.textContent = 'Members: mark attendance';
+    holder.append(link);
+    if (open) {
+      const note = document.createElement('p');
+      note.className = 'event-status';
+      note.textContent = `Attendance is open until ${clockFormat.format(new Date(open.closesAt)).replace(/\s/g, ' ')}.`;
+      holder.append(note);
+    }
+    (root.querySelector('.event-actions') || root.querySelector('.detail-grid > div') || root).prepend(holder);
+  } catch {
+    /* Attendance is optional; the event page works without it. */
+  }
+}
+
+/** On the home page, after "Become a member": a button for each attendance session open now. */
+async function addHomeAttendance() {
+  const membership = document.querySelector('#membership');
+  if (!membership) return;
+  try {
+    const now = new Date();
+    const open = (await (await rest()).list('attendance', { pageSize: 100, max: 300 }))
+      .map((d) => d.data)
+      .flatMap((r) => (r.sessions || []).filter((s) => sessionState(s, now) === 'open').map((s) => ({ r, s })))
+      .sort((a, b) => Date.parse(a.s.closesAt) - Date.parse(b.s.closesAt));
+    if (!open.length) return;
+    const section = document.createElement('section');
+    section.className = 'attendance-now';
+    section.innerHTML = '<div class="wrap"><p class="eyebrow">Members</p><h2>Attendance is open</h2><div class="attendance-now-list"></div></div>';
+    for (const { r, s } of open) {
+      const link = document.createElement('a');
+      link.className = 'button';
+      link.href = `portal.html#attend/${encodeURIComponent(r.eventId)}`;
+      link.textContent = `Mark attendance: ${r.title} · ${s.label}`;
+      const note = document.createElement('small');
+      note.textContent = `Open until ${clockFormat.format(new Date(s.closesAt)).replace(/\s/g, ' ')}`;
+      const item = document.createElement('div');
+      item.append(link, note);
+      section.querySelector('.attendance-now-list').append(item);
+    }
+    membership.after(section);
+  } catch {
+    /* Attendance is optional; the home page works without it. */
+  }
+}
+
 export function setupLiveContent() {
+  addHomeAttendance();
   const roots = [...document.querySelectorAll('#editable-content')];
   if (!roots.length) return;
   let data = null;
@@ -83,6 +147,7 @@ export function setupLiveContent() {
     if (root.dataset.signature === signature) return;
     await swap(root, render(view, content, options));
     root.dataset.signature = signature;
+    if (view === 'event') addAttendanceLink(root, options.id);
     if (view === 'event' && !quiet)
       document.title = `${content.events.find((e) => e.id === options.id)?.title || 'Event not found'} | ${SITE}`;
   }
@@ -95,6 +160,7 @@ export function setupLiveContent() {
     const baked = await bakedContent();
     for (const root of roots) root.dataset.signature = sectionSignature(root.dataset.view, baked, needsQuery ? {} : viewOptions(root));
     data = baked;
+    for (const root of roots) if (root.dataset.view === 'event') addAttendanceLink(root, viewOptions(root).id);
     if (needsQuery) for (const root of roots) await paint(root, data, new URL(location.href));
     const latest = await freshContent();
     if (!latest) return;

@@ -18,6 +18,8 @@ import { editorsView } from './views/editors.js';
 import { backupsView } from './views/backups.js';
 import { accountView } from './views/account.js';
 import { upgradeView } from './views/upgrade.js';
+import { cleanUpImages } from './image-picker.js';
+import { autoSort, autoSortSelects } from '../lib/sort-list.js';
 import { reportsView } from './views/reports.js';
 
 const views = [
@@ -46,6 +48,7 @@ const app = {
   route: { view: 'overview', params: [] },
 };
 window.chapterEditor = app; // Handy when debugging in the browser console.
+app.cleanUpImages = (today) => cleanUpImages(app, today);
 
 // ------------------------------------------------------------------ drafts and publishing
 
@@ -147,7 +150,10 @@ app.publish = async (name, { reload = true, quiet = false } = {}) => {
   if (app.problem?.name === name) app.problem = null;
   if (reload) await app.reload();
   if (name === 'event:new' && app.route.view === 'events') navigate('events', [value.id]);
-  if (name === 'form:new' && app.route.view === 'forms') navigate('forms', [value.id]);
+  if (name === 'form:new' && app.route.view === 'forms') {
+    app.shareNewForm = value.id; // The form view opens its link and QR code once.
+    navigate('forms', [value.id]);
+  }
   if (!quiet) toast(`${label} is live. Visitors see it now; search engines see it after the automatic rebuild (within about 15 minutes).`);
   return true;
 };
@@ -245,12 +251,14 @@ function renderChrome() {
   const needsUpgrade = view === upgradeView;
   const counts = {};
   for (const name of app.drafts.names()) counts[app.draftView(name)[0]] = (counts[app.draftView(name)[0]] || 0) + 1;
-  $('#ed-nav').innerHTML = allowed
-    .map(
-      (v) =>
-        `<a href="#${v.id}" class="ed-nav-item"${v === view ? ' aria-current="page"' : ''}><span class="ed-nav-icon" aria-hidden="true">${v.icon}</span><span>${h(v.title)}</span>${counts[v.id] ? `<span class="ed-badge" title="Unpublished drafts">${counts[v.id]}</span>` : ''}</a>`,
-    )
-    .join('');
+  $('#ed-nav').innerHTML =
+    allowed
+      .map(
+        (v) =>
+          `<a href="#${v.id}" class="ed-nav-item"${v === view ? ' aria-current="page"' : ''}><span class="ed-nav-icon" aria-hidden="true">${v.icon}</span><span>${h(v.title)}</span>${counts[v.id] ? `<span class="ed-badge" title="Unpublished drafts">${counts[v.id]}</span>` : ''}</a>`,
+      )
+      .join('') +
+    '<a href="portal.html" class="ed-nav-item"><span class="ed-nav-icon" aria-hidden="true">👥</span><span>Member Portal ↗</span></a>';
   $('#ed-view-title').textContent = view.title;
   const drafts = app.drafts.names().length;
   const pill = $('#ed-drafts-pill');
@@ -349,6 +357,11 @@ async function activate(user) {
   $('#ed-signin').hidden = true;
   $('#ed-shell').hidden = false;
   route();
+  if (app.data.layout === 'split')
+    app
+      .cleanUpImages()
+      .then((n) => n && toast(`Removed ${n} uploaded image${n === 1 ? '' : 's'} that nothing used for 30 days.`, { type: 'info' }))
+      .catch((error) => console.warn('Image cleanup did not run', error));
   if (!app.drafts.storageWorks)
     toast('This browser is not keeping drafts between visits (private window?). Publish before closing the tab.', { type: 'info' });
 }
@@ -426,3 +439,7 @@ top.addEventListener('click', () => {
 });
 
 start();
+
+// Every growing list gets a Sort dropdown.
+autoSort(document.body, '#ed-view ul.ed-list, #ed-view ul.ed-items, #ed-view tbody', { barClass: 'ed-sort', labelClass: 'ed-label' });
+autoSortSelects(document.body, 'ed-sort-inline');

@@ -1,6 +1,7 @@
 // Draws chapter certificates as self-contained SVG (all text converted to outlines, so they look the
-// same everywhere) and exports them as PDF. Three designs (see "shared pieces" below): Horizon for
-// participation, Prestige for placement awards and Heritage for formal recognition.
+// same everywhere) and exports them as PDF. Four designs (see "shared pieces" below): Horizon for
+// participation, Prestige for placement awards, Heritage for formal recognition, and Executive Member
+// of the Month, named by the President in the Member Portal.
 import { certificateTypes, signatories, certificateURL, formalTypes } from './certificate-model.js';
 import { escapeHTML as h } from './content-model.js';
 import qrcode from '../vendor/qrcode.mjs';
@@ -558,9 +559,73 @@ async function formalSVG(c, { preview }) {
     ${preview ? text(f.semibold, 'SAMPLE — NOT ISSUED', cx, 814, 11, { anchor: 'middle', fill: SAMPLE_RED, spacing: 1.6 }) : ''}
   </svg>`;
 }
+
+// ------------------------------------------------------------------ Executive Member of the Month
+// A clean white sheet with a navy band, the chapter and university marks, and plenty of space around the name.
+
+const MONTH_EVENT = 'member-of-the-month';
+
+async function memberMonthSVG(c, { preview }) {
+  const f = await load({
+    title: loadFont(FONTS.cinzel),
+    semibold: loadFont(FONTS.poppinsSemiBold),
+    regular: loadFont(FONTS.poppins),
+    light: loadFont(FONTS.poppinsLight),
+    italic: loadFont(FONTS.poppinsItalic),
+    label: loadFont(FONTS.bebas),
+    script: loadFont(FONTS.script),
+  });
+  const art = await load({
+    lockup: loadArt(ART.lockup),
+    gstu: loadArt(ART.gstu),
+    advisor: loadArt(ART.advisor),
+    coadvisor: loadArt(ART.coadvisor),
+  });
+  const cx = WIDTH / 2 + 20;
+  const month = String(c.event || '')
+    .split(', ')
+    .pop();
+  const citation = c.achievement || `for outstanding dedication, leadership and service to the AIChE Student Chapter, GSTU during ${month}.`;
+  const cite = paragraph(f.regular, citation, cx, 520, 720, 15, { anchor: 'middle', fill: '#3a4152', maxLines: 2, lineHeight: 1.5 });
+  const monthWidth = Math.min(advance(f.label, month.toUpperCase(), 26) + 26 * 0.12 * month.length + 48, 360);
+  const lockupW = 208;
+  return `${svgOpen(`Executive Member of the Month certificate for ${c.name}`)}<title>${h(`${c.name} — ${c.event} — ${c.id}`)}</title>
+    <defs><linearGradient id="band" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${NAVY}"/><stop offset="1" stop-color="${NAVY_DEEP}"/></linearGradient>${honeycomb('combMonth', '#e3e8f0', 30)}</defs>
+    <rect width="${WIDTH}" height="${HEIGHT}" fill="#ffffff"/>
+    <rect x="50" width="${WIDTH - 50}" height="${HEIGHT}" fill="url(#combMonth)" opacity=".35"/>
+    <g fill="none" stroke="${NAVY}" opacity=".05">${[120, 190, 260].map((r) => hexagon(cx, 430, r, 'stroke-width="2"')).join('')}</g>
+    <rect width="44" height="${HEIGHT}" fill="url(#band)"/>
+    <rect x="44" width="6" height="${HEIGHT}" fill="${SKY}"/>
+    <rect x="74" y="24" width="${WIDTH - 98}" height="${HEIGHT - 48}" fill="none" stroke="#d6dde8" stroke-width="1.2"/>
+
+    <image href="${art.lockup}" x="104" y="52" width="${lockupW}" height="${lockupW * LOCKUP_RATIO}"/>
+    ${emblem(art, WIDTH - 286, 90, 27, GOLD)}
+    ${text(f.semibold, 'GOPALGANJ SCIENCE AND', WIDTH - 248, 86, 9, { fill: '#14713a', spacing: 0.8 })}
+    ${text(f.semibold, 'TECHNOLOGY UNIVERSITY', WIDTH - 248, 100, 9, { fill: '#14713a', spacing: 0.8 })}
+
+    ${text(f.semibold, 'CERTIFICATE OF RECOGNITION', cx, 200, 15, { anchor: 'middle', fill: SKY, spacing: 6 })}
+    ${text(f.title, 'Executive Member of the Month', cx, 258, 46, { anchor: 'middle', fill: NAVY, maxWidth: 900 })}
+    <rect x="${cx - monthWidth / 2}" y="280" width="${monthWidth}" height="40" fill="${GOLD}"/>
+    ${text(f.label, month.toUpperCase(), cx, 309, 26, { anchor: 'middle', fill: NAVY, spacing: 3, maxWidth: monthWidth - 30 })}
+
+    ${text(f.light, 'This certificate is proudly presented to', cx, 372, 15, { anchor: 'middle', fill: MUTED })}
+    ${text(f.script, c.name, cx, 446, 64, { anchor: 'middle', fill: NAVY_2, maxWidth: 760 })}
+    <line x1="${cx - 260}" y1="466" x2="${cx + 260}" y2="466" stroke="${SKY}" stroke-width="1.4"/>
+    ${c.designation ? text(f.italic, c.designation, cx, 492, 15.5, { anchor: 'middle', fill: INK, maxWidth: 600 }) : ''}
+    ${cite.svg}
+
+    ${signatureBlock(f, art, signatories[0], 0, 290, 692, { width: 240 })}
+    ${signatureBlock(f, art, signatories[1], 1, WIDTH - 250, 692, { width: 240 })}
+    ${qrTile(c, cx - 50, 604, 84, 8)}
+    ${text(f.semibold, `Credential ID ${c.id}`, cx, 726, 10, { anchor: 'middle', fill: INK, maxWidth: 260 })}
+    ${text(f.regular, issuedLine(c), cx, 742, 9.5, { anchor: 'middle', fill: MUTED, maxWidth: 300 })}
+    ${preview ? text(f.semibold, 'SAMPLE — NOT ISSUED', cx, 764, 10.5, { anchor: 'middle', fill: SAMPLE_RED, spacing: 1.2 }) : ''}
+  </svg>`;
+}
 // ------------------------------------------------------------------ public API
 
 export async function certificateSVG(c, { preview = false } = {}) {
+  if (c.eventId === MONTH_EVENT) return memberMonthSVG(c, { preview });
   if (formalTypes.includes(c.type)) return formalSVG(c, { preview });
   return AWARDS[c.type] ? awardSVG(c, { preview }) : participationSVG(c, { preview });
 }

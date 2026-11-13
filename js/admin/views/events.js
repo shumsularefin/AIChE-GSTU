@@ -1,4 +1,20 @@
-import { h, $, $$, busy, toast, confirmDialog, openDialog, formValues, fillForm, field, select, slug } from '../ui.js';
+import {
+  h,
+  $,
+  $$,
+  busy,
+  toast,
+  confirmDialog,
+  openDialog,
+  formValues,
+  fillForm,
+  field,
+  select,
+  slug,
+  showFormError,
+  clearFormError,
+  errorMessage,
+} from '../ui.js';
 import { statusHTML, wireStatus, refreshStatus, autosave, showProblem, empty } from '../section.js';
 import { imageFieldHTML, wireImageFields } from '../image-picker.js';
 import { canEditEvent } from '../permissions.js';
@@ -61,12 +77,12 @@ export const eventsView = {
           <div class="ed-filters"><label class="ed-field"><span class="ed-label">Search</span><input type="search" data-search placeholder="Title or location" data-ignore></label>
           <label class="ed-field"><span class="ed-label">Year</span><select data-year data-ignore><option value="">All years</option>${years.map((y) => `<option>${y}</option>`).join('')}</select></label></div>
           <ul class="ed-items" data-items>
-            ${newDraft ? `<li><a href="#events/new"${selected === 'new' ? ' aria-current="true"' : ''}><strong>${h(newDraft.value.title || 'New event')}</strong><small>Draft · not published</small></a></li>` : ''}
+            ${newDraft ? `<li data-sort-fixed><a href="#events/new"${selected === 'new' ? ' aria-current="true"' : ''}><strong>${h(newDraft.value.title || 'New event')}</strong><small>Draft · not published</small></a></li>` : ''}
             ${entries
               .map((entry) => {
                 const e = entry.value;
                 const draft = app.drafts.has(`event:${e.id}`);
-                return `<li data-text="${h((e.title + ' ' + e.location).toLowerCase())}" data-year="${e.date.slice(0, 4)}"><a href="#events/${encodeURIComponent(e.id)}"${selected === e.id ? ' aria-current="true"' : ''}><strong>${h(e.title)}</strong><small>${h(eventDateLabel(e))} · ${categories[e.category]}</small><span class="ed-item-tags">${badge(e, forms)}${draft ? '<span class="ed-tag ed-tag-draft">Draft</span>' : ''}</span></a></li>`;
+                return `<li data-text="${h((e.title + ' ' + e.location).toLowerCase())}" data-sort-date="${h(e.date)}" data-sort-name="${h(e.title)}" data-year="${e.date.slice(0, 4)}"><a href="#events/${encodeURIComponent(e.id)}"${selected === e.id ? ' aria-current="true"' : ''}><strong>${h(e.title)}</strong><small>${h(eventDateLabel(e))} · ${categories[e.category]}</small><span class="ed-item-tags">${badge(e, forms)}${draft ? '<span class="ed-tag ed-tag-draft">Draft</span>' : ''}</span></a></li>`;
               })
               .join('')}
           </ul>

@@ -1,0 +1,40 @@
+<section class="ed ed-portal" aria-labelledby="ed-heading">
+  <noscript><p class="ed-card">The Member Portal needs JavaScript.</p></noscript>
+
+  <div class="ed-signin" id="ed-signin">
+    <div class="ed-signin-card">
+      <img src="images/brand/aiche-symbol.png" width="56" height="56" alt="" aria-hidden="true">
+      <p class="ed-eyebrow">AIChE Student Chapter, GSTU</p>
+      <h1 id="ed-heading">Member Portal</h1>
+      <p>Mark your event attendance, follow your activity and see what the chapter needs from you.</p>
+      <button type="button" class="ed-btn ed-btn-primary ed-btn-large" id="ed-sign-in"><span class="ed-google" aria-hidden="true">G</span> Sign in with Google</button>
+      <p class="ed-signin-status" id="ed-signin-status" role="status" aria-live="polite"></p>
+      <p class="ed-muted">Any chapter member can sign in. The first time, you link your account to your membership ID and a board member approves it.</p>
+    </div>
+  </div>
+
+  <div class="ed-shell" id="ed-shell" hidden>
+    <aside class="ed-sidebar" aria-label="Member Portal">
+      <div class="ed-brand">
+        <img src="images/brand/aiche-symbol.png" width="34" height="34" alt="" aria-hidden="true">
+        <div><strong>Member Portal</strong><span>AIChE Student Chapter, GSTU</span></div>
+        <button type="button" class="ed-nav-toggle" id="ed-nav-toggle" aria-expanded="false" aria-controls="ed-nav">Menu</button>
+      </div>
+      <nav class="ed-nav" id="ed-nav" aria-label="Portal sections"></nav>
+      <div class="ed-user-card">
+        <div class="ed-user" id="ed-user"></div>
+        <button type="button" class="ed-btn ed-btn-quiet ed-btn-small" id="ed-sign-out">Sign out</button>
+      </div>
+      <a class="ed-site-link" href="index.html">Back to the website</a>
+    </aside>
+
+    <div class="ed-main" id="ed-main" tabindex="-1">
+      <header class="ed-topbar">
+        <h2 id="ed-view-title">Home</h2>
+      </header>
+      <div class="ed-view" id="ed-view"></div>
+    </div>
+  </div>
+
+  <div class="ed-toasts" id="ed-toasts" aria-live="polite"></div>
+</section>

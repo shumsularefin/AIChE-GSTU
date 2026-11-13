@@ -1,17 +1,7 @@
 // Chapter Editor data layer: Google sign-in and every Firestore read and write.
 // Each write runs in one transaction or batch together with its activity-log entry (see firestore.rules).
-import { initializeApp } from 'firebase/app';
+import { GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
 import {
-  getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signInWithCredential,
-  signOut as firebaseSignOut,
-  connectAuthEmulator,
-} from 'firebase/auth';
-import {
-  getFirestore,
-  connectFirestoreEmulator,
   doc,
   collection,
   runTransaction,
@@ -31,9 +21,10 @@ import {
 import { normalizeMembershipID, currentCategory, legacyCategories } from '../lib/content-model.js';
 import { stripMeta, contentFromLegacy, documentsFromContent } from '../lib/content-store.js';
 import { membershipLookupID, publicCertificate } from '../lib/certificate-model.js';
+import { connect as connectWith, editorRole, SUPER_ADMIN_EMAIL, ROLES } from './connect.js';
+import { createPortalStore } from '../portal/store.js';
 
-export const SUPER_ADMIN_EMAIL = 'muhammadshamsularefin01@gmail.com';
-export const ROLES = ['super-admin', 'administrator', 'outreach'];
+export { SUPER_ADMIN_EMAIL, ROLES } from './connect.js';
 
 /** Someone else published the same section after this draft was started. */
 export class ConflictError extends Error {
@@ -64,31 +55,12 @@ export function editorEmail(value) {
   return email;
 }
 
-export function connect(config) {
-  const app = initializeApp(config.firebase, 'chapter-editor');
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-  if (config.emulators?.firestore) {
-    const url = new URL(config.emulators.firestore);
-    connectFirestoreEmulator(db, url.hostname, Number(url.port));
-  }
-  if (!config.emulators?.auth) return createCloud({ db, auth });
-  connectAuthEmulator(auth, config.emulators.auth, { disableWarnings: true });
-  const cloud = createCloud({ db, auth });
-  // End-to-end tests only: the Auth emulator accepts unsigned Google test accounts. Real Firebase rejects them.
-  cloud.testSignIn = async (email) =>
-    (
-      await signInWithCredential(
-        auth,
-        GoogleAuthProvider.credential(JSON.stringify({ sub: email.replace(/\W/g, ''), email, email_verified: true })),
-      )
-    ).user;
-  return cloud;
-}
+export const connect = (config) => connectWith(config, createCloud);
 
 /** The data layer for a Firestore instance and an auth object with `currentUser` (tests pass their own). */
 export function createCloud({ db, auth }) {
   const metaRef = doc(db, 'site', 'meta');
+  const cleanupRef = doc(db, 'imageCleanup', 'state');
   const uid = () => auth.currentUser.uid;
 
   function audit(writer, action, target, detail = '', ids) {
@@ -108,16 +80,7 @@ export function createCloud({ db, auth }) {
   const bumpMeta = (tx, metaSnap) =>
     tx.set(metaRef, { revision: (metaSnap.exists() ? metaSnap.data().revision : 0) + 1, updatedAt: serverTimestamp(), updatedBy: uid() });
 
-  async function role(user = auth.currentUser) {
-    if (!user?.emailVerified) return '';
-    if (user.email.toLowerCase() === SUPER_ADMIN_EMAIL) return 'super-admin';
-    try {
-      const grant = await getDocFromServer(doc(db, 'chapterEditors', user.email.toLowerCase()));
-      return grant.exists() && grant.data().active === true && ROLES.includes(grant.data().role) ? grant.data().role : '';
-    } catch {
-      return '';
-    }
-  }
+  const role = (user = auth.currentUser) => editorRole(db, user);
 
   /** Saves one document with a revision check, its log entry and the site revision counter. */
   function saveDocument(ref, { section, action, target, detail, baseRevision, data, extra }) {
@@ -153,6 +116,8 @@ export function createCloud({ db, auth }) {
 
   const api = {
     role,
+    // Member Portal records (attendance setup lives in the event view).
+    portal: createPortalStore({ db, auth }),
     async signIn() {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
@@ -180,6 +145,7 @@ export function createCloud({ db, auth }) {
         getDocFromServer(doc(db, 'pages', 'news')).catch(() => null),
       ]);
       const ids = Object.fromEntries((privateDocs?.docs || []).map((d) => [d.id, d.data().ids || {}]));
+      const execs = Object.fromEntries((privateDocs?.docs || []).map((d) => [d.id, d.data().execs || []]));
       const privateRevisions = Object.fromEntries((privateDocs?.docs || []).map((d) => [d.id, d.data().revision || 0]));
       const result = {
         layout: meta.exists() ? 'split' : 'empty',
@@ -197,7 +163,12 @@ export function createCloud({ db, auth }) {
             d.id,
             {
               value: {
-                members: d.data().members || [],
+                members: (d.data().members || []).map((m, i) => ({
+                  ...m,
+                  ...(superAdmin && d.id !== 'founders'
+                    ? { memID: execs[d.id]?.[i]?.memID || '', email: execs[d.id]?.[i]?.email || '' }
+                    : {}),
+                })),
                 roster: (d.data().roster || []).map((m) => ({ ...m, ...(superAdmin ? { memID: ids[d.id]?.[m.key] || '' } : {}) })),
               },
               revision: d.data().revision || 0,
@@ -265,7 +236,13 @@ export function createCloud({ db, auth }) {
       });
     },
     /** Saves a team year: public names/roles/tiers, and (for annual rosters) the private membership IDs. */
-    saveTeam(year, value, baseRevision) {
+    async saveTeam(year, value, baseRevision) {
+      const founders = year === 'founders';
+      const missing = founders ? [] : value.members.filter((m) => !m.memID || !m.email).map((m) => m.name);
+      if (missing.length) throw Error(`Add the membership ID and Google email of: ${missing.join(', ')}.`);
+      const members = value.members.map(({ name, role, image }) => ({ name, role, image }));
+      const execs = founders ? [] : value.members.map((m) => ({ memID: normalizeMembershipID(m.memID), email: m.email.toLowerCase() }));
+      const before = founders ? null : await getDocFromServer(doc(db, 'rosterPrivate', year));
       const roster = (value.roster || []).map(({ key, name, tier }) => ({ key, name, tier }));
       const ids = Object.fromEntries((value.roster || []).filter((m) => m.memID).map((m) => [m.key, normalizeMembershipID(m.memID)]));
       return saveDocument(doc(db, 'team', year), {
@@ -274,8 +251,11 @@ export function createCloud({ db, auth }) {
         target: year,
         detail: `${value.members.length} committee member(s), ${roster.length} roster member(s)`,
         baseRevision,
-        data: () => (year === 'founders' ? { members: value.members } : { members: value.members, roster }),
-        extra: year === 'founders' ? [] : [{ ref: doc(db, 'rosterPrivate', year), data: { ids } }],
+        data: () => (founders ? { members } : { members, roster }),
+        extra: founders ? [] : [{ ref: doc(db, 'rosterPrivate', year), data: { ids, execs } }],
+      }).then(async (result) => {
+        if (!founders) await api.portal.syncDirectory(year, value.members, before?.exists() ? before.data().execs || [] : []);
+        return result;
       });
     },
     deleteTeamYear(year) {
@@ -480,9 +460,31 @@ export function createCloud({ db, auth }) {
         }))
         .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     },
-    async deleteImage(id, name) {
+    /** { unusedSince: { id: 'YYYY-MM-DD' }, checkedOn } — null while the rules predate image cleanup. */
+    async imageCleanup() {
+      try {
+        const snap = await getDocFromServer(cleanupRef);
+        return { unusedSince: {}, checkedOn: '', ...(snap.exists() ? snap.data() : {}) };
+      } catch (error) {
+        if (error?.code === 'permission-denied') return null;
+        throw error;
+      }
+    },
+    /** Applies change(state) to the cleanup bookkeeping; returns the saved state, or null if unchanged. */
+    async updateImageCleanup(change) {
+      return runTransaction(db, async (tx) => {
+        const snap = await tx.get(cleanupRef);
+        const current = { unusedSince: {}, checkedOn: '', ...(snap.exists() ? snap.data() : {}) };
+        const next = change(current);
+        if (!next || (JSON.stringify(next.unusedSince) === JSON.stringify(current.unusedSince) && next.checkedOn === current.checkedOn))
+          return null;
+        tx.set(cleanupRef, { unusedSince: next.unusedSince, checkedOn: next.checkedOn, updatedAt: serverTimestamp(), updatedBy: uid() });
+        return next;
+      });
+    },
+    async deleteImage(id, name, reason = 'Removed unused image') {
       const batch = writeBatch(db);
-      const auditId = audit(batch, 'image.delete', id, `Removed unused image ${name || ''}`.trim());
+      const auditId = audit(batch, 'image.delete', id, `${reason} ${name || ''}`.trim());
       batch.set(doc(db, 'removals', `siteImages:${id}`), { auditId });
       batch.delete(doc(db, 'siteImages', id));
       await batch.commit();

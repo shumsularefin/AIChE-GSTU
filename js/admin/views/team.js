@@ -58,7 +58,7 @@ export const teamView = {
               m,
               i,
             ) => `<li><img alt="" width="56" height="56" data-ref="${h(m.image || '')}"${m.image ? '' : ' hidden'}><span class="ed-avatar"${m.image ? ' hidden' : ''} aria-hidden="true">${h(m.name.slice(0, 1))}</span>
-              <div><strong>${h(m.name)}</strong><span>${h(m.role)}</span></div>
+              <div><strong>${h(m.name)}</strong><span>${h(m.role)}</span>${!founders && (!m.memID || !m.email) ? '<span class="ed-tag ed-tag-revoked">Add membership ID and email</span>' : ''}</div>
               <div class="ed-actions">
                 <button type="button" class="ed-btn ed-btn-small ed-btn-quiet" data-member-move="${i}" data-by="-1" ${i ? '' : 'disabled'} aria-label="Move ${h(m.name)} up">↑</button>
                 <button type="button" class="ed-btn ed-btn-small ed-btn-quiet" data-member-move="${i}" data-by="1" ${i < value.members.length - 1 ? '' : 'disabled'} aria-label="Move ${h(m.name)} down">↓</button>
@@ -218,6 +218,12 @@ function memberDialog(app, member, founders) {
     `<h2>${member ? 'Edit member' : founders ? 'Add founding member' : 'Add committee member'}</h2><form class="ed-dialog-body ed-form" novalidate><div class="ed-grid">
       ${field({ label: 'Name', name: 'name', value: member?.name || '', attrs: 'required maxlength="150"' })}
       ${field({ label: 'Role', name: 'role', value: member?.role || '', attrs: 'required maxlength="150" placeholder="e.g. President"' })}
+      ${
+        founders
+          ? ''
+          : `${field({ label: 'AIChE membership ID', name: 'memID', value: member?.memID || '', attrs: 'required maxlength="40" autocomplete="off"' })}
+      ${field({ label: 'Google email', name: 'email', type: 'email', value: member?.email || '', attrs: 'required maxlength="200" autocomplete="off"', hint: 'Private. Their Member Portal profile is created from it; President, Vice President, Secretary and Treasurer become portal admins.' })}`
+      }
       ${imageFieldHTML({ name: 'image', value: member?.image || '', label: 'Photo', hint: 'Optional. A square portrait works best.' })}
     </div><p class="ed-form-error" role="alert" hidden></p></form><div class="ed-actions"><button type="button" class="ed-btn ed-btn-quiet" data-close>Cancel</button><button type="button" class="ed-btn ed-btn-primary" data-save>${member ? 'Save to draft' : 'Add to draft'}</button></div>`,
     (dialog, close) => {
@@ -225,7 +231,10 @@ function memberDialog(app, member, founders) {
       wireImageFields(form, app);
       $('[data-save]', dialog).addEventListener('click', () => {
         try {
-          close(normalizePerson(formValues(form)));
+          const person = normalizePerson(formValues(form), { keepPrivate: !founders });
+          if (!founders && (!person.memID || !person.email))
+            throw Error('Membership ID and Google email are required for executive members.');
+          close(person);
         } catch (error) {
           const box = $('.ed-form-error', dialog);
           box.textContent = error.message;

@@ -34,6 +34,7 @@ export const editorsView = {
       <section class="ed-card">
         <div class="ed-card-head"><h3>Editors</h3></div>
         <p>Editors sign in with their own Google account. Give each person the smallest role they need, and disable access when their term ends.</p>
+        <p class="ed-note">Chapter Editor roles cover the public website only. Member Portal roles (President, Vice President, Secretary, Treasurer and members) are separate: they come from the Team page or are set in the portal, and a Chapter Editor role gives no portal access.</p>
         <dl class="ed-roles">${Object.entries(roleInfo)
           .map(([id, r]) => `<div><dt>${h(r.label)}</dt><dd>${h(r.summary)}</dd></div>`)
           .join('')}</dl>

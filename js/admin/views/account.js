@@ -29,6 +29,7 @@ export const accountView = {
       <section class="ed-card"><h3>Signed in</h3><dl class="ed-details"><dt>Google account</dt><dd>${h(app.user.email)}</dd><dt>Role</dt><dd>${h(roleInfo[app.role].label)}</dd></dl>
         <p>${h(roleInfo[app.role].summary)}</p>
         <ul class="ed-can">${can.map(([label, ok]) => `<li class="${ok ? 'yes' : 'no'}"><span aria-hidden="true">${ok ? '✓' : '–'}</span> ${h(label)}<span class="ed-sr">${ok ? ' (allowed)' : ' (not allowed)'}</span></li>`).join('')}</ul>
+        <p class="ed-muted">Chapter Editor roles cover the public website only. Member Portal roles (President, Vice President, Secretary, Treasurer and members) are separate: they come from the Team page or are set in the portal, and this role gives no portal access.</p>
         <p class="ed-muted">Access is managed by the chapter super-admin. Signing out keeps your drafts in this browser.</p>
         <button type="button" class="ed-btn" data-sign-out>Sign out</button></section>`;
     $('[data-sign-out]', root).addEventListener('click', () => document.getElementById('ed-sign-out').click());

@@ -53,6 +53,8 @@ test('the AIChE brand theme and the homepage content are in place', () => {
     'class="menu-toggle"',
     'class="header-join"',
     'id="site-drawer"',
+    'class="quick-grid"',
+    'href="portal.html"',
     'Engineering Tomorrow: Your AIChE Community at GSTU',
     'id="membership"',
     'Membership benefits &amp; renewal',
@@ -64,6 +66,9 @@ test('the AIChE brand theme and the homepage content are in place', () => {
   assert.ok(home.includes('id="hero-controls"'));
   assert.ok(!home.includes('{{'), 'every template placeholder is filled');
   assert.ok(!home.includes('bootstrap'), 'no Bootstrap');
+  const header = home.slice(home.indexOf('<header'), home.indexOf('</header>'));
+  assert.ok(!header.includes('admin.html'), 'no sign-in link in the header: the Chapter editor link is in the footer');
+  assert.ok(home.slice(home.indexOf('<footer')).includes('href="admin.html"'), 'Chapter editor link in the footer');
   assert.ok(read('css/original-fonts.css').includes('Poppins'));
   assert.ok(read('css/site-fonts.css').includes('Nunito Sans'));
 });

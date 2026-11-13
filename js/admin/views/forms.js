@@ -475,6 +475,10 @@ function renderBuilder(root, app, entry, name) {
     );
   });
   $('[data-share]', form)?.addEventListener('click', () => shareDialog(entry.value));
+  if (entry && app.shareNewForm === entry.value.id) {
+    app.shareNewForm = null;
+    shareDialog(entry.value);
+  }
   $('[data-link-event]', form)?.addEventListener('click', () => {
     const event = app.data.events.find((e) => e.value.id === entry.value.eventId);
     if (!event) return toast('The linked event no longer exists.', { type: 'error' });

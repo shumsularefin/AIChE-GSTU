@@ -424,7 +424,7 @@ function renderCatalog(root, app) {
       ? `<table class="ed-table"><thead><tr><th>Event or term</th><th>Date</th><th>Shown publicly</th></tr></thead><tbody>${events
           .map(
             (e) =>
-              `<tr><td>${h(e.title)}</td><td>${h(dateLabel(e.date))}</td><td><button type="button" class="ed-btn ed-btn-small ${e.archived ? '' : 'ed-btn-quiet'}" data-toggle="${h(e.id)}" data-archived="${!!e.archived}">${e.archived ? 'Hidden · show it' : 'Shown · hide it'}</button></td></tr>`,
+              `<tr data-sort-date="${h(e.date || '')}"><td>${h(e.title)}</td><td>${h(dateLabel(e.date))}</td><td><button type="button" class="ed-btn ed-btn-small ${e.archived ? '' : 'ed-btn-quiet'}" data-toggle="${h(e.id)}" data-archived="${!!e.archived}">${e.archived ? 'Hidden · show it' : 'Shown · hide it'}</button></td></tr>`,
           )
           .join('')}</tbody></table>`
       : '<p class="ed-muted">No certificates have been issued yet.</p>';
@@ -460,10 +460,10 @@ function renderRecords(root, app) {
     );
     const rows = records.map(
       (c) =>
-        `<tr data-text="${h(`${c.name} ${c.event} ${c.id}`.toLowerCase())}"><td>${h(c.name)}</td><td>${h(LABEL[c.type] || c.type || 'Participation')}</td><td>${h(c.event)}</td><td>${h(c.createdAt ? when(c.createdAt) : c.dateIssued || '')}</td><td><span class="ed-tag ${c.status === 'revoked' ? 'ed-tag-revoked' : 'ed-tag-open'}">${c.status === 'revoked' ? 'Revoked' : 'Valid'}</span></td><td><a class="ed-mono" href="${h(certificateURL(c.id, location.origin))}" target="_blank" rel="noopener">${h(c.id)}</a></td><td>${c.status === 'revoked' ? `<button type="button" class="ed-btn ed-btn-small ed-btn-danger-quiet" data-delete-cert="${h(c.id)}" data-name="${h(c.name)}">Delete</button>` : ''}</td></tr>`,
+        `<tr data-text="${h(`${c.name} ${c.event} ${c.id}`.toLowerCase())}" data-sort-date="${h(c.dateIssued || '')}"><td>${h(c.name)}</td><td>${h(LABEL[c.type] || c.type || 'Participation')}</td><td>${h(c.event)}</td><td>${h(c.createdAt ? when(c.createdAt) : c.dateIssued || '')}</td><td><span class="ed-tag ${c.status === 'revoked' ? 'ed-tag-revoked' : 'ed-tag-open'}">${c.status === 'revoked' ? 'Revoked' : 'Valid'}</span></td><td><a class="ed-mono" href="${h(certificateURL(c.id, location.origin))}" target="_blank" rel="noopener">${h(c.id)}</a></td><td>${c.status === 'revoked' ? `<button type="button" class="ed-btn ed-btn-small ed-btn-danger-quiet" data-delete-cert="${h(c.id)}" data-name="${h(c.name)}">Delete</button>` : ''}</td></tr>`,
     );
     $('[data-list]', root).innerHTML = records.length
-      ? `<p class="ed-muted">${records.length} certificates, newest first.</p><table class="ed-table"><thead><tr><th>Recipient</th><th>Category</th><th>Event or term</th><th>Issued</th><th>Status</th><th>Credential</th><th><span class="ed-sr">Actions</span></th></tr></thead><tbody>${rows.join('')}</tbody></table>`
+      ? `<p class="ed-muted">${records.length} certificates, newest first unless you sort them.</p><table class="ed-table"><thead><tr><th>Recipient</th><th>Category</th><th>Event or term</th><th>Issued</th><th>Status</th><th>Credential</th><th><span class="ed-sr">Actions</span></th></tr></thead><tbody>${rows.join('')}</tbody></table>`
       : '<p class="ed-muted">No certificates have been issued yet.</p>';
     $('[data-list]', root).addEventListener('click', async (e) => {
       const t = e.target.closest('[data-delete-cert]');

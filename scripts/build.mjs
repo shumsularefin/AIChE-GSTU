@@ -316,7 +316,12 @@ const adminCSSName = hashed('admin', adminCSS, 'css');
 write(`css/${adminCSSName}`, adminCSS);
 
 const bundles = await esbuild.build({
-  entryPoints: { site: 'js/public/site.js', certificates: 'js/public/certificates.js', admin: 'js/admin/main.js' },
+  entryPoints: {
+    site: 'js/public/site.js',
+    certificates: 'js/public/certificates.js',
+    admin: 'js/admin/main.js',
+    portal: 'js/portal/main.js',
+  },
   bundle: true,
   minify: true,
   format: 'esm',
@@ -465,8 +470,8 @@ function shareImage(src) {
   return SITE + (v ? v[v.length - 1].src : src);
 }
 
-function page(filename, { title, description, body, active, view, attrs = {}, admin = false, image = '' }) {
-  const crumbs = active && !['index', 'admin'].includes(active) && filename !== '404.html' ? breadcrumb(active, title) : '';
+function page(filename, { title, description, body, active, view, attrs = {}, admin = false, bundle = 'admin', image = '' }) {
+  const crumbs = active && !['index', 'admin', 'portal'].includes(active) && filename !== '404.html' ? breadcrumb(active, title) : '';
   const header = read('src/partials/header.html').replaceAll('{{navigation}}', navigationHTML(active)) + crumbs;
   if (view) {
     const dataAttrs = Object.entries({ view, ...attrs })
@@ -475,7 +480,7 @@ function page(filename, { title, description, body, active, view, attrs = {}, ad
     body = `<div id="editable-content"${dataAttrs}>${body}</div>`;
   }
   const scripts = admin
-    ? `<link rel="stylesheet" href="css/${adminCSSName}"><script type="module" src="${script.admin}"></script>`
+    ? `<link rel="stylesheet" href="css/${adminCSSName}"><script type="module" src="${script[bundle]}"></script>`
     : `<script type="module" src="${script.site}"></script>${active === 'certificates' ? `<script type="module" src="${script.certificates}"></script>` : ''}`;
   const canonical = `${SITE}${filename === 'index.html' ? '' : filename}`;
   const head = [
@@ -553,6 +558,14 @@ page('admin.html', {
   active: 'admin',
   body: sourcePage('admin'),
   admin: true,
+});
+page('portal.html', {
+  title: 'Member Portal',
+  description: 'Member Portal of the AIChE Student Chapter, GSTU.',
+  active: 'portal',
+  body: sourcePage('portal'),
+  admin: true,
+  bundle: 'portal',
 });
 page('form.html', {
   title: 'Chapter form',
@@ -675,7 +688,9 @@ write('data/site-config.json', JSON.stringify(siteConfig, null, 2));
 fs.copyFileSync('data/image-manifest.json', path.join(publicRoot, 'data/image-manifest.json'));
 write('data/content.json', JSON.stringify(data));
 // Search engines: every public page, never the dashboard.
-const listed = pages.filter((f) => !['admin.html', '404.html', 'event.html', 'verify.html'].includes(f) && !f.startsWith('form'));
+const listed = pages.filter(
+  (f) => !['admin.html', 'portal.html', '404.html', 'event.html', 'verify.html'].includes(f) && !f.startsWith('form'),
+);
 const years = [...new Set(data.events.map((e) => e.date.slice(0, 4)))];
 const urls = [
   ...listed.map((f) => SITE + (f === 'index.html' ? '' : f)),
@@ -694,6 +709,7 @@ write(
   'robots.txt',
   `User-agent: *
 Disallow: /admin.html
+Disallow: /portal.html
 Sitemap: ${SITE}sitemap.xml
 `,
 );

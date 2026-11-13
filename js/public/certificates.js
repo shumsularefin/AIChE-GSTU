@@ -13,6 +13,7 @@ import { certificateSVG, downloadCertificate } from '../lib/certificate-render.j
 import { escapeHTML as h } from '../lib/content-model.js';
 import { dateLabel } from '../lib/content-render.js';
 import { rest, buildInfo } from './site-data.js';
+import { autoSortSelects } from '../lib/sort-list.js';
 
 const $ = (id) => document.getElementById(id);
 const result = $('result');
@@ -223,6 +224,7 @@ $('verify-form').addEventListener('submit', (e) => {
 });
 
 loadCatalog();
+autoSortSelects(document.body);
 const initial = new URLSearchParams(location.search).get('certId');
 if (initial) {
   document.querySelector('.credential-id-option')?.setAttribute('open', '');

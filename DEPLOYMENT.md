@@ -101,6 +101,16 @@ Under **Settings → Environments**, create `firestore-rules` and add yourself a
 
 GitHub pauses scheduled workflows in public repositories after 60 days without commits. If search engines stop picking up published changes, re-enable the workflow in the Actions tab. Visitors always see published changes right away.
 
+## Member Portal (attendance)
+
+The portal is a second page, `/portal.html`, built and deployed with the rest of the site. It adds Firestore collections (`portalMembers`, `attendance`, `attendanceQuestions`, `attendanceKeys`, `attendanceAnswers`) and rules for them in `firestore.rules`.
+
+1. Deploy the site as usual (push to `main`).
+2. **Deploy the Firestore rules** (Actions → **Deploy Firestore security rules**, or `npx firebase deploy --only firestore:rules --project aiche-gstu`). Until then the portal says it is not switched on yet.
+3. The President and the other officers sign in once at `/portal.html` and link their membership. The super-admin approves them in **Members** and sets their roles (the super-admin counts as President).
+
+No Cloud Functions or Storage are used; everything runs in the browser, and the rules enforce the 2-hour window, one answer per member per day, and who can read questions and expected answers.
+
 ## Editor access
 
 The super-admin manages access in **Manage editors & activity**. Enter a Google account email, choose a role, and save. Disable or remove access when a term ends; the activity log keeps the history.
@@ -119,7 +129,7 @@ GitHub collaborators are separate from dashboard editors. Add developers in GitH
 
 ## Free-tier limits (Spark plan)
 
-Firestore allows 50,000 reads and 20,000 writes per day for free. A visitor usually costs one read every five minutes (the freshness check). Uploaded images are baked into the site, so they cost nothing after the next build. Each uploaded image is stored at up to about 280 KB.
+Firestore allows 50,000 reads and 20,000 writes per day for free. A visitor usually costs one read every five minutes (the freshness check). Uploaded images are baked into the site, so they cost nothing after the next build. Each uploaded image is stored at up to about 280 KB. Opening the image library reads every uploaded image once, and so does the daily unused-image check when the super-admin opens the dashboard; both stay far within the free limits. Unused images are removed after 30 days by that check, without Cloud Functions; it starts working once the rules with `imageCleanup` are deployed.
 
 ## Backups and rollback
 

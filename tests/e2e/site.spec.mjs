@@ -26,6 +26,12 @@ async function signIn(page, email) {
   await page.evaluate((e) => window.chapterEditor.testSignIn(e), email);
 }
 
+async function portalSignIn(page, email, hash = '') {
+  await page.goto('/portal.html' + hash);
+  await page.waitForFunction(() => window.memberPortal?.testSignIn);
+  await page.evaluate((e) => window.memberPortal.testSignIn(e), email);
+}
+
 const toast = (page, text) => expect(page.locator('.ed-toast', { hasText: text }).first()).toBeVisible();
 
 test.beforeAll(async ({ browser }) => {
@@ -64,6 +70,19 @@ test('a multi-day event with open registration and no registration link is promo
   await expect(visitor.getByRole('heading', { name: 'Science Fair', level: 1 })).toBeVisible();
   await expect(visitor.locator('.event-detail .eyebrow')).toContainText('10 March 2027 – 12 March 2027');
   await expect(visitor.getByText('Registration details will be announced here.')).toBeVisible();
+
+  // Event lists everywhere can be sorted; the choice is remembered.
+  await visitor.goto('/activities.html?year=all');
+  const cards = visitor.locator('.event-grid .event-card');
+  await expect(cards.first()).toContainText('Science Fair');
+  await visitor.locator('.sort-bar select').selectOption('oldest');
+  await expect(cards.first()).not.toContainText('Science Fair');
+  await visitor.reload();
+  await expect(visitor.locator('.sort-bar select')).toHaveValue('oldest');
+  await expect(cards.last()).toContainText('Science Fair');
+  await owner.goto('/admin.html#events');
+  await owner.locator('.ed-sort select').first().selectOption('oldest');
+  await expect(owner.locator('[data-items] li').last()).toContainText('Science Fair');
   await visitor.close();
 });
 
@@ -240,6 +259,26 @@ test('an event registration form is built, answered once per transaction, checke
   await expect(owner).toHaveURL(/#forms\/lab-safety-workshop-registration-\d{4}$/);
   formId = decodeURIComponent(owner.url().split('#forms/')[1]);
 
+  // A new form opens its link and QR code; the QR code leads to the form's own page.
+  const share = owner.locator('dialog', { hasText: 'Download QR code (PNG)' });
+  await expect(share).toBeVisible();
+  await expect(share.locator('[data-link]')).toHaveValue(`https://aiche-gstu.web.app/form-${formId}.html`);
+  await owner.evaluate(readFileSync(jsqrPath, 'utf8'));
+  const qrLink = await owner.evaluate(async () => {
+    const img = new Image();
+    img.src = URL.createObjectURL(new Blob([document.querySelector('.ed-fb-qr svg').outerHTML], { type: 'image/svg+xml' }));
+    await img.decode();
+    const canvas = Object.assign(document.createElement('canvas'), { width: 640, height: 640 });
+    canvas.getContext('2d').drawImage(img, 0, 0, 640, 640);
+    const data = canvas.getContext('2d').getImageData(0, 0, 640, 640);
+    return window.jsQR(data.data, data.width, data.height)?.data || null;
+  });
+  expect(qrLink).toBe(`https://aiche-gstu.web.app/form-${formId}.html`);
+  const png = owner.waitForEvent('download');
+  await share.getByRole('button', { name: 'Download QR code (PNG)' }).click();
+  expect((await png).suggestedFilename()).toBe(`${formId}-qr.png`);
+  await share.getByRole('button', { name: 'Close' }).click();
+
   // The event chooses the form from a dropdown; the form, not the event, decides when registration is open.
   await owner.goto('/admin.html#events/science-fair-2027');
   await owner.locator('form.ed-form [name="registrationFormId"]').selectOption(formId);
@@ -305,6 +344,75 @@ test('an event registration form is built, answered once per transaction, checke
   expect((await download).suggestedFilename()).toMatch(new RegExp(`^${formId}-responses-.*\.xlsx$`));
 });
 
+test('the image library filters by use, groups by month, and removes images unused for 30 days', async () => {
+  const jpeg = async (color) =>
+    Buffer.from(
+      await owner.evaluate(async (c) => {
+        const canvas = Object.assign(document.createElement('canvas'), { width: 64, height: 64 });
+        const context = canvas.getContext('2d');
+        context.fillStyle = c;
+        context.fillRect(0, 0, 64, 64);
+        return [...new Uint8Array(await (await new Promise((r) => canvas.toBlob(r, 'image/jpeg'))).arrayBuffer())];
+      }, color),
+    );
+  await owner.goto('/admin.html#events/science-fair-2027');
+  await owner
+    .locator('[data-image-field] input[type="file"]')
+    .setInputFiles({ name: 'fair-photo.jpg', mimeType: 'image/jpeg', buffer: await jpeg('#2a7') });
+  await toast(owner, 'Image uploaded');
+  await owner.locator('[data-publish-draft]').click();
+  await toast(owner, 'is live');
+  await owner.evaluate(async () => {
+    const app = window.chapterEditor;
+    for (const [name, color] of [
+      ['spare-poster.jpg', '#c33'],
+      ['old-banner.jpg', '#33c'],
+    ]) {
+      const canvas = Object.assign(document.createElement('canvas'), { width: 64, height: 64 });
+      const context = canvas.getContext('2d');
+      context.fillStyle = color;
+      context.fillRect(0, 0, 64, 64);
+      await app.cloud.uploadImage(canvas.toDataURL('image/jpeg'), name);
+    }
+    app.imageCache = null;
+  });
+  await owner.goto('/admin.html#homepage');
+  await owner.getByRole('button', { name: 'Choose uploaded image' }).click();
+  const library = owner.locator('dialog', { hasText: 'Uploaded images' });
+  await expect(library.locator('figure')).toHaveCount(3);
+  await expect(library.locator('.ed-library-month h3')).toHaveText([
+    new RegExp(`^${new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}`),
+  ]);
+  await expect(library.locator('figure', { hasText: 'fair-photo.jpg' })).toContainText('Science Fair');
+  await library.locator('[data-kind]').selectOption('unused');
+  await expect(library.locator('figure')).toHaveCount(2);
+  await library.locator('[data-kind]').selectOption('events');
+  await expect(library.locator('figure')).toHaveText([/fair-photo\.jpg/]);
+  await library.locator('[data-kind]').selectOption('');
+  await library.locator('[data-q]').fill('banner');
+  await expect(library.locator('figure')).toHaveText([/old-banner\.jpg/]);
+  await library.locator('[data-q]').fill('');
+  await library.getByRole('button', { name: 'Close' }).click();
+
+  // First check: unused images start their 30 days. One already waited 31 days.
+  const result = await owner.evaluate(async () => {
+    const app = window.chapterEditor;
+    const day = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
+    await app.cloud.updateImageCleanup((s) => ({ ...s, checkedOn: '' }));
+    await app.cleanUpImages(day(0));
+    const images = await app.cloud.images();
+    const banner = images.find((i) => i.name === 'old-banner.jpg');
+    await app.cloud.updateImageCleanup((s) => ({ unusedSince: { ...s.unusedSince, [banner.id]: day(-31) }, checkedOn: '' }));
+    const removed = await app.cleanUpImages(day(0));
+    return {
+      removed,
+      left: (await app.cloud.images()).map((i) => i.name).sort(),
+      tracked: Object.keys((await app.cloud.imageCleanup()).unusedSince).length,
+    };
+  });
+  expect(result).toEqual({ removed: 1, left: ['fair-photo.jpg', 'spare-poster.jpg'], tracked: 1 });
+});
+
 test('an outreach editor gets only the tools of that role', async ({ browser }) => {
   await owner.goto('/admin.html#editors');
   const form = owner.locator('[data-editor-form]');
@@ -328,6 +436,159 @@ test('an outreach editor gets only the tools of that role', async ({ browser }) 
   await expect(page.locator('input[value="executive"]')).toBeDisabled();
   await page.goto('/admin.html#events/science-fair-2027');
   await expect(page.getByText('You can view this event.')).toBeVisible();
+  await context.close();
+});
+
+test('members mark attendance, the board approves and reviews it, and rankings count it', async ({ browser }) => {
+  // A portal admin opens attendance for the published event, right now.
+  await portalSignIn(owner, OWNER, '#attendance');
+  await owner.locator('[name="event"]').selectOption('science-fair-2027');
+  await expect(owner.locator('[name="label"]')).toHaveValue('Day 1');
+  await owner.locator('[name="question"]').fill('Which experiment opened the fair?');
+  await owner.locator('[name="answer"]').fill('Volcano');
+  await owner.getByRole('button', { name: 'Open attendance' }).click();
+  await toast(owner, 'Attendance is open');
+  await expect(owner.getByText('Open now (1)')).toBeVisible();
+
+  // The home page shows the attendance button after "Become a member".
+  const home = await browser.newPage();
+  await home.goto('/index.html');
+  await expect(home.locator('#membership + .attendance-now').getByRole('link', { name: /Mark attendance: Science Fair/ })).toHaveAttribute(
+    'href',
+    'portal.html#attend/science-fair-2027',
+  );
+  await home.close();
+
+  // The public event page offers the portal link while attendance is open.
+  const visitor = await browser.newPage();
+  await visitor.goto('/event.html?id=science-fair-2027');
+  await expect(visitor.getByRole('link', { name: 'Members: mark attendance' })).toHaveAttribute(
+    'href',
+    'portal.html#attend/science-fair-2027',
+  );
+  await expect(visitor.getByText('Attendance is open until')).toBeVisible();
+  await visitor.close();
+
+  // A member links their membership.
+  const context = await browser.newContext();
+  const member = await context.newPage();
+  await portalSignIn(member, 'amina@example.com');
+  await member.locator('[name="name"]').fill('Amina Rahman');
+  await member.locator('[name="memID"]').fill('am-100');
+  await member.locator('[name="rosterYear"]').selectOption('2026');
+  await member.getByRole('button', { name: 'Send for approval' }).click();
+  await expect(member.getByRole('heading', { name: 'Waiting for approval' })).toBeVisible();
+
+  // The super-admin approves the claim.
+  await portalSignIn(owner, OWNER, '#members');
+  await expect(owner.getByText('Amina Rahman')).toBeVisible();
+  await owner.locator('li[data-uid]', { hasText: 'Amina Rahman' }).getByRole('button', { name: 'Approve' }).click();
+  await toast(owner, 'Amina Rahman is approved');
+
+  // The member answers inside the window.
+  await portalSignIn(member, 'amina@example.com');
+  await expect(member.getByRole('heading', { name: 'Welcome, Amina' })).toBeVisible();
+  await member.getByRole('link', { name: 'Science Fair' }).first().click();
+  await member.locator('textarea[name="answer"]').fill('The volcano');
+  await member.getByRole('button', { name: 'Submit attendance' }).click();
+  await expect(member.getByText('Waiting for review').first()).toBeVisible();
+
+  // The board reviews: the answer matches the expected one, then is accepted.
+  await portalSignIn(owner, OWNER, '#review');
+  await expect(owner.getByText('Matches')).toBeVisible();
+  await owner.getByRole('button', { name: 'Accept all matching (1)' }).click();
+  await owner.getByRole('dialog').getByRole('button', { name: 'Accept' }).click();
+  await toast(owner, '1 accepted');
+
+  // Rankings show 100% and export to Excel.
+  await portalSignIn(owner, OWNER, '#rankings/all');
+  await expect(owner.locator('tbody tr', { hasText: 'Amina Rahman' })).toContainText('100%');
+  const download = owner.waitForEvent('download');
+  await owner.getByRole('button', { name: 'Download attendance (Excel)' }).click();
+  expect((await download).suggestedFilename()).toBe('attendance-all.xlsx');
+  await context.close();
+});
+
+test('the board assigns a task with points; the member hands it in and sees the points and notification', async ({ browser }) => {
+  const shot = (page, name) => process.env.SHOT_DIR && page.screenshot({ path: `${process.env.SHOT_DIR}/${name}.png`, fullPage: true });
+  await portalSignIn(owner, OWNER, '#manage-tasks');
+  await owner.getByRole('button', { name: 'New task' }).click();
+  const dialog = owner.getByRole('dialog');
+  // Tasks can be tied to an event (newest first); the title stays separate.
+  await expect(dialog.locator('[name="eventId"] option').nth(1)).toHaveText(/Science Fair/);
+  await dialog.locator('[name="eventId"]').selectOption('science-fair-2027');
+  // Event dropdowns have their own Sort choice; the selection is kept.
+  await dialog.locator('.ed-sort-inline select').selectOption('oldest');
+  await expect(dialog.locator('[name="eventId"] option').last()).toHaveText(/Science Fair/);
+  await expect(dialog.locator('[name="eventId"]')).toHaveValue('science-fair-2027');
+  await dialog.locator('[name="title"]').fill('Design the fair poster');
+  await dialog.locator('[name="points"]').fill('40');
+  await dialog.getByLabel('Amina Rahman').check();
+  await dialog.getByRole('button', { name: 'Create task' }).click();
+  await toast(owner, 'Task created');
+  await portalSignIn(owner, OWNER, '#notices');
+  await owner.locator('[name="title"]').fill('General meeting on Friday');
+  await owner.locator('[name="body"]').fill('Room 204, 3 pm. Bring your ideas for the fair.');
+  await owner.getByRole('button', { name: 'Post' }).click();
+  await toast(owner, 'Posted');
+
+  const context = await browser.newContext();
+  const member = await context.newPage();
+  await portalSignIn(member, 'amina@example.com');
+  await expect(member.locator('.ed-nav-item', { hasText: 'Notifications' }).locator('.ed-badge')).toHaveText('2');
+  await expect(member.getByText('General meeting on Friday')).toBeVisible();
+  await expect(member.locator('[data-tasks]')).toContainText('Design the fair poster');
+  await shot(member, 'portal-home-before');
+  await member.goto('/portal.html#tasks');
+  await member.getByText('Hand in this task').click();
+  await member.locator('textarea[name="note"]').fill('Poster attached.');
+  await member.locator('[name="link"]').fill('https://example.com/poster.pdf');
+  await member.getByRole('button', { name: 'Hand in' }).click();
+  await toast(member, 'Handed in');
+
+  await portalSignIn(owner, OWNER, '#manage-tasks');
+  await expect(owner.locator('[data-task]', { hasText: 'Design the fair poster' })).toContainText('Science Fair');
+  await shot(owner, 'portal-board-tasks');
+  await owner.getByRole('button', { name: 'Approve' }).click();
+  await expect(owner.getByRole('dialog').locator('[name="points"]')).toHaveValue('40');
+  await owner.getByRole('dialog').getByRole('button', { name: 'Approve' }).click();
+  await toast(owner, 'member is notified');
+
+  await portalSignIn(member, 'amina@example.com');
+  await expect(member.locator('.ed-stat', { hasText: 'Points' })).toContainText('40');
+  await shot(member, 'portal-home-after');
+
+  // Contribution claims can name an event, or describe something else.
+  await portalSignIn(owner, OWNER, '#claims');
+  await owner.getByRole('button', { name: 'Open claims' }).click();
+  await expect(owner.getByRole('button', { name: 'Close claims' })).toBeVisible();
+  await shot(owner, 'portal-claims');
+  await member.goto('/portal.html#contributions');
+  await member.locator('[name="eventId"]').selectOption('science-fair-2027');
+  await member.locator('[name="title"]').fill('Ran the photo booth');
+  await member.locator('[name="date"]').fill('2026-10-01');
+  await member.getByRole('button', { name: 'Send for review' }).click();
+  await toast(member, 'Sent');
+  await expect(member.locator('.ed-list', { hasText: 'Ran the photo booth' })).toContainText('Science Fair');
+  await context.close();
+});
+
+test('the board adds executive members, who get access as soon as they sign in', async ({ browser }) => {
+  await portalSignIn(owner, OWNER, '#members');
+  const form = owner.locator('form[data-add]');
+  await form.locator('[name="name"]').fill('Karim Hasan');
+  await form.locator('[name="email"]').fill('karim@example.com');
+  await form.locator('[name="memID"]').fill('31110001');
+  await form.getByRole('button', { name: 'Add member' }).click();
+  await toast(owner, '1 member added');
+  await expect(owner.locator('li[data-entry="karim@example.com"]')).toContainText('Executive Member');
+  process.env.SHOT_DIR && (await owner.screenshot({ path: `${process.env.SHOT_DIR}/portal-members.png`, fullPage: true }));
+
+  const context = await browser.newContext();
+  const karim = await context.newPage();
+  await portalSignIn(karim, 'karim@example.com');
+  await expect(karim.getByRole('heading', { name: 'Welcome, Karim' })).toBeVisible();
+  await expect(karim.locator('#ed-user')).toContainText('Executive Member');
   await context.close();
 });
 
@@ -377,6 +638,21 @@ test('the dashboard and public pages fit a phone screen', async ({ browser }) =>
         .map((el) => `${el.tagName}.${el.className} ${Math.round(el.getBoundingClientRect().right)}`),
     );
     expect(wide, hash).toEqual([]);
+  }
+  for (const hash of ['#home', '#members', '#review', '#rankings']) {
+    await portalSignIn(page, OWNER, hash);
+    await expect(page.locator('#ed-view')).not.toBeEmpty();
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.scrollWidth <= innerWidth
+          ? true
+          : [...document.querySelectorAll('#ed-view *')]
+              .filter((e) => e.getBoundingClientRect().right > innerWidth)
+              .slice(0, 6)
+              .map((e) => e.tagName + '.' + e.className + ' ' + e.textContent.slice(0, 40)),
+      ),
+      `portal ${hash}`,
+    ).toBe(true);
   }
   await context.close();
 });
