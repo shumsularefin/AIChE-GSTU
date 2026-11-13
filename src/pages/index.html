@@ -1,20 +1,30 @@
 <section class="hero{{heroClass}}" aria-labelledby="hero-title">
-  <div class="hero-slides" id="hero-slides" aria-hidden="true">{{heroSlides}}</div>
-  <div class="wrap hero-content">
-    <p class="hero-kicker">American Institute of Chemical Engineers · Student Chapter</p>
-    <h1 id="hero-title">The GSTU Home of Future Chemical Engineers</h1>
-    <p class="slide-btn"><a href="https://www.gstu.edu.bd/s/"><b>Gopalganj Science and Technology University, Gopalganj</b></a></p>
-    <p class="hero-lead">The AIChE Student Chapter connects chemical engineering students at GSTU with workshops, plant visits, research, mentors and industry, and with more than 52,000 AIChE members around the world.</p>
-    <div id="open-events" class="open-events"{{openEventHidden}}>{{openEvent}}</div>
-    <dl class="hero-numbers">
+  <div class="wrap hero-grid">
+    <div class="hero-content">
+      <p class="hero-kicker">AIChE Student Chapter · Est. 2026</p>
+      <h1 id="hero-title">The GSTU Home of <span>Future Chemical Engineers</span></h1>
+      <p class="slide-btn"><a href="https://www.gstu.edu.bd/s/"><b>Gopalganj Science and Technology University, Gopalganj</b></a></p>
+      <p class="hero-lead">Workshops, plant visits, research and mentors: the AIChE Student Chapter connects chemical engineering students at GSTU with industry and with more than 52,000 AIChE members around the world.</p>
+      <div id="open-events" class="open-events"{{openEventHidden}}>{{openEvent}}</div>
+      <div class="hero-cta">
+        <a class="hero-cta-main" href="index.html#membership">Join the chapter</a>
+        <a href="activities.html">Explore events</a>
+      </div>
+    </div>
+    <div class="hero-visual" aria-hidden="true">
+      <div class="hero-frame">
+        <div class="hero-slides" id="hero-slides">{{heroSlides}}</div>
+        <img class="hero-mark" src="images/brand/aiche-chapter-lockup-white.png" width="1200" height="533" alt="">
+      </div>
+    </div>
+  </div>
+  <div class="hero-stats">
+    <dl class="wrap hero-numbers">
       <div><dt>Events &amp; activities</dt><dd>{{eventCount}}</dd></div>
       <div><dt>Executive committees</dt><dd>{{teamYears}}</dd></div>
       <div><dt>Focus areas</dt><dd>4</dd></div>
+      <div><dt>AIChE members worldwide</dt><dd>52k</dd></div>
     </dl>
-    <div class="hero-cta">
-      <a href="index.html#membership">Join</a>
-      <a href="certificates.html">Certificates</a>
-    </div>
   </div>
   <div class="hero-controls" id="hero-controls" hidden><button id="hero-previous" type="button" aria-label="Show previous slide">←</button><button id="hero-play" type="button" aria-label="Pause slideshow">Pause</button><span id="hero-position" aria-live="polite">1 / 1</span><button id="hero-next" type="button" aria-label="Show next slide">→</button></div>
 </section>

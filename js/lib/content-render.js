@@ -329,7 +329,7 @@ export function heroSlides(data) {
 export function renderHeroSlides(data) {
   return heroSlides(data)
     .map((src, i) => {
-      const image = photo(src, '', i ? '' : 'active').replace(/ sizes="[^"]*"/, ' sizes="100vw"');
+      const image = photo(src, '', i ? '' : 'active').replace(/ sizes="[^"]*"/, ' sizes="(min-width: 900px) 440px, 240px"');
       return i ? image : image.replace('loading="lazy"', 'loading="eager" fetchpriority="high"');
     })
     .join('');

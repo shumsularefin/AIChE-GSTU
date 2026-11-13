@@ -1,6 +1,6 @@
 /* AIChE Student Chapter, GSTU — site theme. Takes aiche.org as a base (slim white header with a green Menu
-   button and a blue Join block, a deep navy hero with big numbers, a pale-blue "pillars" band, a navy
-   footer, square corners, AIChE sky blue and navy) and adds the chapter's own pieces: numbered "Start here"
+   button and a blue Join block, a pale-blue "pillars" band, a navy
+   footer, square corners, AIChE sky blue and navy) and adds the chapter's own pieces: a navy-and-gold molecular hero, numbered "Start here"
    tiles, "Stay connected" cards, attendance, and the Member Portal. */
 :root {
   --navy: #00304c;
@@ -18,6 +18,7 @@
   --green-2: #8fca12;
   --link: #003366;
   /* Older rules call the accent gold: it is AIChE sky blue, as on aiche.org. */
+  --amber: #d4a62a;
   --gold: #009ade;
   --gold-2: #a4e3ff;
   --gold-soft: #e5f5fc;
@@ -182,40 +183,66 @@ a:hover .arrow-circle, .arrow-circle:hover { background: var(--blue); border-col
 .breadcrumb a:hover { text-decoration: underline; }
 .breadcrumb [aria-current] { color: var(--muted); }
 
-/* ------------------------------------------------------------ hero: deep navy with a glow rising from below, a large
-   centred headline, a lead, big numbers between thin rules, then Join / Certificates links. Homepage images
-   from the Chapter Editor fade behind it under a navy veil. */
-.hero { position: relative; overflow: hidden; color: #fff; background: var(--gradient-hero); text-align: center; }
-.hero::before { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(60% 40% at 50% 112%, rgb(164 227 255 / 30%) 0%, transparent 70%), radial-gradient(90% 60% at 50% 120%, transparent 62%, rgb(164 227 255 / 22%) 63%, transparent 66%); }
-.hero-slides { position: absolute; inset: 0; z-index: 0; }
-.hero-slides img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 1s ease; }
-.hero-slides img.active { opacity: 1; }
-.hero.has-slides::before { background: linear-gradient(180deg, rgb(0 34 53 / 82%) 0%, rgb(0 48 76 / 78%) 55%, rgb(0 34 53 / 92%) 100%); }
-@media (prefers-reduced-motion: reduce) { .hero-slides img { transition: none; } }
-.hero-content { position: relative; z-index: 2; padding: clamp(56px, 8vw, 96px) 0 clamp(48px, 6vw, 72px); display: flex; flex-direction: column; align-items: center; }
-.hero-kicker { margin: 0 0 18px; color: var(--ice); font-size: 13px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
-.hero h1 { max-width: 1060px; margin: 0 0 22px; color: #fff; font-size: clamp(44px, 6.6vw, 96px); font-weight: 600; line-height: 1.12; letter-spacing: -0.01em; }
-.hero .slide-btn { margin: 0 0 14px; }
-.slide-btn a { color: var(--ice); text-decoration: none; font-size: 17px; }
+/* ------------------------------------------------------------ hero: the chapter's own look, not aiche.org's.
+   Deep navy with a molecular honeycomb and the gold diagonal from the chapter's brand artwork, a left-aligned
+   headline with the second line in gold, and the chapter mark in a hexagon frame. Homepage images from the
+   Chapter Editor rotate inside that frame. A slim stats strip closes the hero. */
+.hero { position: relative; overflow: hidden; color: #fff; background: #021a2b url("../images/brand/hero-molecules.svg") right center / cover no-repeat; }
+.hero-grid { position: relative; z-index: 2; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: center; gap: 32px 56px; padding-block: clamp(56px, 7vw, 104px) clamp(48px, 6vw, 80px); }
+.hero-content { display: flex; flex-direction: column; align-items: flex-start; }
+.hero-kicker { display: flex; align-items: center; gap: 12px; margin: 0 0 20px; color: var(--amber); font-size: 13px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
+.hero-kicker::before { content: ''; width: 36px; height: 3px; background: var(--amber); }
+.hero h1 { margin: 0 0 20px; color: #fff; font-family: var(--serif); font-size: clamp(38px, 5vw, 72px); font-weight: 700; line-height: 1.12; letter-spacing: -0.01em; }
+.hero h1 span { display: block; color: var(--amber); }
+.hero .slide-btn { margin: 0 0 12px; }
+.slide-btn a { color: var(--ice); text-decoration: none; font-size: 16px; }
 .slide-btn a:hover { color: #fff; text-decoration: underline; }
 .slide-btn b { font-weight: 700; }
-.hero-lead { max-width: 800px; margin: 0 0 28px; color: #fff; font-size: clamp(17px, 1.5vw, 20px); line-height: 1.9; }
-.hero .open-events { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-bottom: 30px; }
+.hero-lead { max-width: 620px; margin: 0 0 26px; color: rgb(255 255 255 / 88%); font-size: clamp(17px, 1.4vw, 19px); line-height: 1.75; }
+.hero .open-events { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
 .hero .open-events[hidden] { display: none; }
-.hero-numbers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: min(960px, 100%); margin: 8px 0 0; padding: 30px 0 0; border-top: 1px solid rgb(164 227 255 / 35%); }
-.hero-numbers div { display: flex; flex-direction: column-reverse; padding: 0 16px; }
-.hero-numbers div + div { border-left: 1px solid rgb(164 227 255 / 35%); }
-.hero-numbers dd { margin: 0; font-size: clamp(54px, 7vw, 100px); font-weight: 600; line-height: 1.1; color: #fff; }
-.hero-numbers dt { font-size: clamp(14px, 1.4vw, 19px); text-transform: uppercase; letter-spacing: .02em; color: #fff; }
-.hero-cta { display: flex; justify-content: center; margin-top: 40px; border: 1px solid rgb(255 255 255 / 55%); }
-.hero-cta a { min-width: 170px; padding: 14px 28px; color: #fff; font-size: 16px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; text-decoration: none; transition: background .2s, color .2s; }
-.hero-cta a:first-child { background: var(--sky); }
-.hero-cta a:hover { background: #fff; color: var(--navy); }
-.hero-controls { position: absolute; z-index: 3; right: 20px; bottom: 20px; display: flex; align-items: center; background: rgb(0 34 53 / 70%); border: 1px solid rgb(255 255 255 / 30%); }
+.hero-cta { display: flex; flex-wrap: wrap; gap: 12px; }
+.hero-cta a { display: inline-flex; align-items: center; gap: 10px; min-height: 50px; padding: 0 26px; border: 2px solid rgb(255 255 255 / 70%); color: #fff; font-size: 15px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; text-decoration: none; transition: background .2s, color .2s, border-color .2s; }
+.hero-cta a::after { content: '\2192'; transition: transform .2s; }
+.hero-cta a:hover::after { transform: translateX(4px); }
+.hero-cta .hero-cta-main { background: var(--amber); border-color: var(--amber); color: var(--navy-deep); }
+.hero-cta a:hover { background: #fff; border-color: #fff; color: var(--navy); }
+/* The hexagon frame: the chapter mark, or the homepage photos when there are any. */
+.hero-visual { display: flex; justify-content: center; }
+.hero-frame { position: relative; width: min(100%, 440px); aspect-ratio: 1 / 1.1547; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: linear-gradient(160deg, rgb(164 227 255 / 45%), rgb(212 166 42 / 55%)); display: grid; place-items: center; }
+.hero-frame::before { content: ''; position: absolute; inset: 3px; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: radial-gradient(circle at 50% 40%, #0d4d75, #021a2b 75%); }
+.hero-mark { position: relative; width: 74%; height: auto; }
+.hero-slides { position: absolute; inset: 3px; z-index: 1; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); }
+.hero-slides img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 1s ease; }
+.hero-slides img.active { opacity: 1; }
+.hero:not(.has-slides) .hero-slides { display: none; }
+.hero.has-slides .hero-mark { display: none; }
+@media (prefers-reduced-motion: reduce) { .hero-slides img { transition: none; } }
+.hero-stats { position: relative; z-index: 2; background: rgb(2 26 43 / 72%); border-top: 1px solid rgb(212 166 42 / 45%); }
+.hero-numbers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0 auto; padding-block: 22px; }
+.hero-numbers div { display: flex; flex-direction: column-reverse; gap: 2px; padding: 0 20px; }
+.hero-numbers div:first-child { padding-left: 0; }
+.hero-numbers div + div { border-left: 1px solid rgb(164 227 255 / 22%); }
+.hero-numbers dd { margin: 0; color: var(--amber); font-family: var(--serif); font-size: clamp(30px, 3.2vw, 44px); font-weight: 700; line-height: 1.1; }
+.hero-numbers dt { color: rgb(255 255 255 / 82%); font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.hero-controls { position: absolute; z-index: 3; right: 20px; bottom: 112px; display: flex; align-items: center; background: rgb(0 34 53 / 70%); border: 1px solid rgb(255 255 255 / 30%); }
 .hero-controls[hidden] { display: none; }
 .hero-controls button { min-width: 40px; height: 40px; padding: 0 12px; border: 0; background: transparent; color: #fff; font: 700 12px var(--font); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
-.hero-controls button:hover { background: var(--sky); }
+.hero-controls button:hover { background: var(--amber); color: var(--navy-deep); }
 .hero-controls span { color: #fff; font-size: 12.5px; padding: 0 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 900px) {
+  .hero { background-image: linear-gradient(180deg, rgb(2 26 43 / 30%) 0, rgb(2 26 43 / 82%) 300px), url("../images/brand/hero-molecules.svg"); background-position: center, 72% top; background-size: auto, cover; }
+  .hero-grid { grid-template-columns: 1fr; padding-top: 36px; }
+  .hero-visual { order: -1; justify-content: flex-start; }
+  .hero-frame { width: min(42vw, 170px); }
+  .hero-numbers { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 18px; }
+  .hero-numbers div:nth-child(3) { padding-left: 0; border-left: 0; }
+  .hero-controls { bottom: auto; top: 16px; }
+}
+@media (max-width: 520px) {
+  .hero-cta { width: 100%; }
+  .hero-cta a { flex: 1 1 100%; justify-content: center; }
+}
 /* Registration button: AIChE green with a contained colour sweep and a moving arrow. */
 .hero-registration { display: inline-flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 26px; background: linear-gradient(110deg, var(--green) 15%, #b6e04a 45%, var(--green) 75%); background-size: 220% 100%; color: #000; font: 800 16px/1.2 var(--font); text-decoration: none; overflow: hidden; animation: registration-sweep 1.8s ease-in-out infinite alternate; }
 .hero-registration:hover, .hero-registration:focus-visible { animation: none; background: #b6e04a; color: #000; }
@@ -225,14 +252,6 @@ a:hover .arrow-circle, .arrow-circle:hover { background: var(--blue); border-col
 @keyframes registration-sweep { from { background-position: 100% 0; } to { background-position: 0 0; } }
 @keyframes registration-arrow { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(5px); } }
 @media (prefers-reduced-motion: reduce) { .hero-registration, .registration-arrow { animation: none; } }
-@media (max-width: 640px) {
-  .hero-numbers { grid-template-columns: 1fr; gap: 18px; }
-  .hero-numbers div + div { border-left: 0; border-top: 1px solid rgb(164 227 255 / 25%); padding-top: 18px; }
-  .hero-cta { width: 100%; }
-  .hero-cta a { flex: 1; min-width: 0; padding: 14px 10px; }
-  .hero-controls { left: 50%; right: auto; transform: translateX(-50%); bottom: 12px; }
-  .hero-content { padding-bottom: 76px; }
-}
 
 /* ------------------------------------------------------------ homepage sections */
 section { position: relative; }

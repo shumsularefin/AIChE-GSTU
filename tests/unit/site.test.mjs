@@ -48,7 +48,8 @@ test('the AIChE brand theme and the homepage content are in place', () => {
     assert.ok(theme.includes(token), token);
   const home = read('public/index.html');
   for (const text of [
-    'The GSTU Home of Future Chemical Engineers',
+    'The GSTU Home of <span>Future Chemical Engineers</span>',
+    'class="hero-frame"',
     'Our Three Pillars',
     'class="menu-toggle"',
     'class="header-join"',
@@ -71,6 +72,7 @@ test('the AIChE brand theme and the homepage content are in place', () => {
   assert.ok(home.slice(home.indexOf('<footer')).includes('href="admin.html"'), 'Chapter editor link in the footer');
   assert.ok(read('css/original-fonts.css').includes('Poppins'));
   assert.ok(read('css/site-fonts.css').includes('Nunito Sans'));
+  assert.ok(theme.includes('hero-molecules.svg'), 'the hero has the chapter background');
 });
 
 test('one events page and one team page cover every year', () => {
