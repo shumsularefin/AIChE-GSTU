@@ -81,14 +81,18 @@ test('a multi-day event with open registration and no registration link is promo
   await owner.locator('[data-publish-draft]').click();
   await toast(owner, 'is live');
   await expect(owner).toHaveURL(/#events\/plant-visit-2025$/);
-  await visitor.goto('/activities.html?year=all');
-  const cards = visitor.locator('.event-grid .event-card');
+  // A new visitor: the first one keeps the content it read for five minutes, from before Plant Visit.
+  const reader = await browser.newPage();
+  await reader.goto('/activities.html?year=all');
+  const cards = reader.locator('.event-grid .event-card');
+  await expect(cards).toHaveCount(3);
   await expect(cards.first()).toContainText('Science Fair');
-  await visitor.locator('.sort-bar select').selectOption('oldest');
+  await reader.locator('.sort-bar select').selectOption('oldest');
   await expect(cards.first()).not.toContainText('Science Fair');
-  await visitor.reload();
-  await expect(visitor.locator('.sort-bar select')).toHaveValue('oldest');
+  await reader.reload();
+  await expect(reader.locator('.sort-bar select')).toHaveValue('oldest');
   await expect(cards.last()).toContainText('Science Fair');
+  await reader.close();
   await owner.goto('/admin.html#events');
   await owner.locator('.ed-sort select').first().selectOption('oldest');
   await expect(owner.locator('[data-items] li').last()).toContainText('Science Fair');
