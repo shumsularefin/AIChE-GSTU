@@ -137,6 +137,13 @@ test('Publish all publishes what is valid and opens the section that needs fixin
 test('roster members show by name only; membership IDs stay private', async ({ browser }) => {
   await owner.goto('/admin.html#team/2026');
   await expect(owner.locator('[data-roster-add]')).toBeVisible();
+  // Publishing a year needs every executive's membership ID and Google email, which the starter committee
+  // lacks: start this year from an empty committee, as a new chapter year would.
+  while (await owner.locator('[data-member-remove]').count()) {
+    await owner.locator('[data-member-remove]').first().click();
+    await owner.locator('dialog[open]').getByRole('button', { name: 'Remove', exact: true }).click();
+    await expect(owner.locator('dialog[open]')).toHaveCount(0);
+  }
   const add = owner.locator('[data-roster-add]');
   await add.getByLabel('Member name').fill('Test Member');
   await add.getByLabel('Membership ID').fill('00042');

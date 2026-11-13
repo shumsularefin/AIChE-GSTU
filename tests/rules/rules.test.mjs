@@ -212,8 +212,14 @@ test('homepage and membership are open to every editor role; team records only t
   );
   await assertFails(stranger.cloud.savePage('homepage', { images: [] }, loaded.homepage.revision + 1));
   await assertFails(setDoc(doc(anon.db, 'pages', 'homepage'), { images: [] }));
-  await assertFails(outreach.cloud.saveTeam('2026', loaded.team['2026'].value, loaded.team['2026'].revision));
+  // Publishing a year needs every executive's membership ID and Google email (the seed has neither).
+  const complete = (value) => ({
+    ...value,
+    members: value.members.map((m, i) => ({ ...m, memID: m.memID || `E-${i + 1}`, email: m.email || `exec${i + 1}@example.com` })),
+  });
+  await assertFails(outreach.cloud.saveTeam('2026', complete(loaded.team['2026'].value), loaded.team['2026'].revision));
   const team = (await owner.cloud.load('super-admin')).team['2026'];
+  team.value = complete(team.value);
   team.value.roster.push({ key: 'rgamma0003', name: 'New Member', tier: 'general', memID: '00999' });
   await assertSucceeds(owner.cloud.saveTeam('2026', team.value, team.revision));
   assert.equal((await owner.cloud.load('super-admin')).team['2026'].value.roster.at(-1).memID, '00999');
