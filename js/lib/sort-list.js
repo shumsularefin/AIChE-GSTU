@@ -132,10 +132,12 @@ export function autoSort(root, selector, { barClass = 'sort-bar', labelClass = '
       enhance(list, index, { barClass, labelClass });
     }
   };
+  // Next frame, or shortly after when frames are paused (a background tab): whichever comes first.
   new MutationObserver(() => {
     if (!pending) {
       pending = true;
-      requestAnimationFrame(scan);
+      requestAnimationFrame(() => pending && scan());
+      setTimeout(() => pending && scan(), 150);
     }
   }).observe(root, { childList: true, subtree: true });
   scan();
@@ -225,10 +227,12 @@ export function autoSortSelects(root, className = 'sort-select') {
       if ([...select.options].filter((o) => optionDate(o)).length >= 2) enhanceSelect(select, className);
     }
   };
+  // Next frame, or shortly after when frames are paused (a background tab): whichever comes first.
   new MutationObserver(() => {
     if (!pending) {
       pending = true;
-      requestAnimationFrame(scan);
+      requestAnimationFrame(() => pending && scan());
+      setTimeout(() => pending && scan(), 150);
     }
   }).observe(root, { childList: true, subtree: true });
   scan();
