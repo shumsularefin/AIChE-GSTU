@@ -71,7 +71,16 @@ test('a multi-day event with open registration and no registration link is promo
   await expect(visitor.locator('.event-detail .eyebrow')).toContainText('10 March 2027 – 12 March 2027');
   await expect(visitor.getByText('Registration details will be announced here.')).toBeVisible();
 
-  // Event lists everywhere can be sorted; the choice is remembered.
+  // Event lists everywhere can be sorted; the choice is remembered. Sorting shows from three events on, and
+  // the starter content has one: add an older event (before the 2027 fiscal year the report test counts).
+  await owner.goto('/admin.html#events/new');
+  await form.locator('[name="title"]').fill('Plant Visit');
+  await form.locator('[name="date"]').fill('2025-03-05');
+  await form.locator('[name="description"]').fill('A visit to a fertilizer plant.');
+  await expect(owner.locator('.ed-chip-draft')).toBeVisible();
+  await owner.locator('[data-publish-draft]').click();
+  await toast(owner, 'is live');
+  await expect(owner).toHaveURL(/#events\/plant-visit-2025$/);
   await visitor.goto('/activities.html?year=all');
   const cards = visitor.locator('.event-grid .event-card');
   await expect(cards.first()).toContainText('Science Fair');
